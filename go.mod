@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/coreos/go-oidc/v3 v3.10.0
-	github.com/golang-jwt/jwt/v5 v5.2.0
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.10.0
