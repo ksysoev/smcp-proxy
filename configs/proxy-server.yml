@@ -1,0 +1,57 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "10s"
+
+mcp:
+  # Global timeout for all backends (can be overridden per backend)
+  timeout: "60s"
+  
+  # Configure multiple MCP backends with different paths
+  backends:
+    # Models API backend
+    - name: "models-api"
+      url: "http://mcp-models.example.com"
+      path: "/models"
+      strip_path: true
+      timeout: "120s"  # Override global timeout
+    
+    # Inference API backend
+    - name: "inference-api"
+      url: "http://mcp-inference.example.com"
+      path: "/inference"
+      strip_path: true
+    
+    # Default backend for all other paths
+    - name: "default"
+      url: "http://mcp-default.example.com"
+      path: "/"
+      strip_path: false
+      
+  # Legacy configuration (deprecated, use backends instead)
+  # endpoints:
+  #  - "http://localhost:9000"
+
+oidc:
+  issuers:
+    - "https://your-identity-provider.com"  # Replace with your actual OIDC issuer URL
+  audience: "your-api-audience"            # Replace with your API audience
+  required_claims:
+    # Define required claims that must be present in the token
+    # For example:
+    # roles: "admin"
+  optional_claims:
+    # Define optional claims that if present must match specific values
+    # For example:
+    # scope: "read:data"
+
+tls:
+  enabled: false
+  # cert_file: "/path/to/cert.pem"
+  # key_file: "/path/to/key.pem"
+
+metrics:
+  enabled: true
+  path: "/metrics"
