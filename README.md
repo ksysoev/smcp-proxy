@@ -1,5 +1,10 @@
 # SMCP Proxy
 
+[![Go CI](https://github.com/ksysoev/smcp-proxy/actions/workflows/go-ci.yml/badge.svg)](https://github.com/ksysoev/smcp-proxy/actions/workflows/go-ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ksysoev/smcp-proxy)](https://goreportcard.com/report/github.com/ksysoev/smcp-proxy)
+[![codecov](https://codecov.io/gh/ksysoev/smcp-proxy/branch/main/graph/badge.svg)](https://codecov.io/gh/ksysoev/smcp-proxy)
+[![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/smcp-proxy.svg)](https://pkg.go.dev/github.com/ksysoev/smcp-proxy)
+
 A secure reverse proxy for Model Context Protocol (MCP) services with OIDC authentication.
 
 ## Overview
@@ -327,6 +332,30 @@ The proxy provides a `/api/models` endpoint that returns information about all c
 3. **Configurability**: Extensive configuration options allow customization for different environments.
 4. **Resilience**: The system handles failures gracefully, with proper error handling and recovery.
 5. **Observability**: Comprehensive logging and metrics support to monitor the system's behavior.
+
+### Continuous Integration
+
+This project uses GitHub Actions for continuous integration:
+
+- **Linting**: Runs `golangci-lint` and `fieldalignment` to ensure code quality and performance
+- **Testing**: Runs unit tests with race detection and reports code coverage
+- **Building**: Ensures the project builds successfully on each push and pull request
+
+To run tests and linting locally:
+
+```sh
+# Run all tests
+go test ./...
+
+# Run tests with race detection and coverage
+go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+# Run linting
+golangci-lint run
+
+# Check struct field alignment
+fieldalignment -test ./...
+```
 
 ## License
 
