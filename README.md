@@ -1,10 +1,12 @@
 # SMCP Proxy
 
-A secure reverse proxy for Model Customization Platform (MCP) services with OIDC authentication.
+A secure reverse proxy for Model Context Protocol (MCP) services with OIDC authentication.
 
 ## Overview
 
-SMCP Proxy provides a secure layer in front of MCP services, enabling enterprise-grade authentication and authorization using OIDC. It consists of two main components:
+SMCP Proxy provides a secure layer in front of Model Context Protocol (MCP) services, enabling enterprise-grade authentication and authorization using OIDC. MCP is a protocol designed for interacting with Large Language Models (LLMs) in a standardized way.
+
+The proxy consists of two main components:
 
 1. **Proxy Server**: Validates OIDC tokens from clients and forwards authenticated requests to MCP server(s)
 2. **Proxy Client**: Implements client credentials flow to acquire tokens and acts as a local unauthenticated MCP service
