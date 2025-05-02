@@ -125,6 +125,15 @@ func TestServerHealth(t *testing.T) {
 		validator: &MockTokenValidator{},
 		mux:       http.NewServeMux(),
 		backends:  make(map[string]MCPBackendHandler),
+		cfg: &config.ServerConfig{
+			Metrics: struct {
+				Enabled bool   "mapstructure:\"enabled\""
+				Path    string "mapstructure:\"path\""
+			}{
+				Enabled: false,
+				Path:    "/metrics",
+			},
+		},
 	}
 
 	// Initialize routes

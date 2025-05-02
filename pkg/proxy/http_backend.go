@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ksysoev/smcp-proxy/pkg/auth"
 	"github.com/ksysoev/smcp-proxy/pkg/config"
 )
@@ -79,6 +80,14 @@ func NewHTTPBackendHandler(backend config.MCPBackend, logger *slog.Logger) (*HTT
 			if email, ok := claims["email"].(string); ok {
 				req2.Header.Set("X-Email", email)
 			}
+		} else if claims, ok := req.Context().Value(auth.ClaimsContextKey).(jwt.MapClaims); ok {
+			// Handle jwt.MapClaims type (used in tests)
+			if sub, ok := claims["sub"].(string); ok {
+				req2.Header.Set("X-Subject", sub)
+			}
+			if email, ok := claims["email"].(string); ok {
+				req2.Header.Set("X-Email", email)
+			}
 		}
 
 		// Remove authentication header to prevent forwarding it
@@ -102,10 +111,10 @@ func NewHTTPBackendHandler(backend config.MCPBackend, logger *slog.Logger) (*HTT
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Create a copy of the backend to store as a p
+	// Create the backend handler
 	return &HTTPBackendHandler{
-		backend: backend,
-		backend: &backendCopy,
+		backend: &backend,
+		proxy:   proxy,
 		logger:  logger.With("backend", backend.ID, "transport", "http"),
 	}, nil
 }
@@ -117,7 +126,6 @@ func (h *HTTPBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 // Start initializes the HTTP backend
 func (h *HTTPBackendHandler) Start() error {
-	h.logger.Info("Starting HTTP backend", 
 	h.logger.Info("Starting HTTP backend",
 		"id", h.backend.ID,
 		"name", h.backend.Name,

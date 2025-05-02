@@ -53,7 +53,7 @@ func TestRecovery(t *testing.T) {
 		// Verify log contains the panic information
 		logStr := logBuf.String()
 		assert.Contains(t, logStr, "HTTP handler panic recovered")
-		assert.Contains(t, logStr, "error=test panic")
+		assert.Contains(t, logStr, "error=\"test panic\"")
 		assert.Contains(t, logStr, "path=/panic")
 		assert.Contains(t, logStr, "method=GET")
 		assert.Contains(t, logStr, "remote_addr=127.0.0.1:12345")
@@ -77,7 +77,7 @@ func TestRecovery(t *testing.T) {
 		// Verify log contains the panic information
 		logStr := logBuf.String()
 		assert.Contains(t, logStr, "HTTP handler panic recovered")
-		assert.Contains(t, logStr, "error=assert.AnError")
+		assert.Contains(t, logStr, "error=\"assert.AnError general error for testing\"")
 		assert.Contains(t, logStr, "path=/panic-error")
 		assert.Contains(t, logStr, "method=POST")
 	})

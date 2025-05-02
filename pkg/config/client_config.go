@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -26,12 +27,12 @@ type ClientConfig struct {
 
 	// OIDC configuration
 	OIDC struct {
-		Issuer       string        `mapstructure:"issuer"`
-		ClientID     string        `mapstructure:"client_id"`
-		ClientSecret string        `mapstructure:"client_secret"`
-		Audience     string        `mapstructure:"audience"`
-		Scopes       []string      `mapstructure:"scopes"`
-		CacheTTL     time.Duration `mapstructure:"cache_ttl"`
+		Issuer        string        `mapstructure:"issuer"`
+		ClientID      string        `mapstructure:"client_id"`
+		ClientSecret  string        `mapstructure:"client_secret"`
+		Audience      string        `mapstructure:"audience"`
+		Scopes        []string      `mapstructure:"scopes"`
+		CacheTTL      time.Duration `mapstructure:"cache_ttl"`
 		TokenTTLDelta time.Duration `mapstructure:"token_ttl_delta"`
 	} `mapstructure:"oidc"`
 
@@ -65,6 +66,7 @@ func NewClientConfig(configPath string) (*ClientConfig, error) {
 
 	// Override config values from environment variables
 	v.SetEnvPrefix("SMCP_CLIENT")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	var config ClientConfig

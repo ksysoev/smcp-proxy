@@ -34,7 +34,7 @@ func TestTokenTransport(t *testing.T) {
 	transport := &TokenTransport{
 		Base:   baseTransport,
 		Client: mockClient,
-		logger: test.NewTestLogger(),
+		Logger: test.NewTestLogger(),
 	}
 
 	t.Run("Adds token to request", func(t *testing.T) {
