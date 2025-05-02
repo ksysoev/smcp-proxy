@@ -17,13 +17,13 @@ import (
 
 // MCPProcess manages a local MCP process using stdio for communication
 type MCPProcess struct {
-	cfg       config.StdioConfig
-	backendID string
-	cmd       *exec.Cmd
 	stdin     io.WriteCloser
 	stdout    io.ReadCloser
-	mutex     sync.Mutex
+	cmd       *exec.Cmd
 	logger    *slog.Logger
+	backendID string
+	cfg       config.StdioConfig
+	mutex     sync.Mutex
 	started   bool
 }
 
@@ -116,7 +116,9 @@ func (p *MCPProcess) Stop() error {
 
 	// Close stdin to signal the process to exit gracefully
 	if p.stdin != nil {
-		p.stdin.Close()
+		if err := p.stdin.Close(); err != nil {
+			p.logger.Warn("Failed to close stdin pipe", "error", err)
+		}
 	}
 
 	// Wait for the process to exit with a timeout

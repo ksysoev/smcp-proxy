@@ -104,7 +104,7 @@ func (s *Server) initRoutes() {
 	// Add health check endpoint
 	s.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	// Add metrics endpoint if enabled
@@ -112,7 +112,7 @@ func (s *Server) initRoutes() {
 		s.mux.HandleFunc("GET "+s.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
 			// Metrics implementation would go here
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Metrics would be here"))
+			_, _ = w.Write([]byte("Metrics would be here"))
 		})
 	}
 
@@ -120,10 +120,12 @@ func (s *Server) initRoutes() {
 	s.mux.HandleFunc("GET /api/models", func(w http.ResponseWriter, r *http.Request) {
 		models := ListBackendModels(s.cfg.MCP.Backends)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"object": "list",
 			"data":   models,
-		})
+		}); err != nil {
+			s.logger.Error("Failed to encode models response", "error", err)
+		}
 	})
 
 	// Handle legacy endpoints configuration (for backward compatibility)

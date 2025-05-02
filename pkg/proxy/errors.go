@@ -18,8 +18,8 @@ func (e ErrBackendNotFound) Error() string {
 
 // ErrBackendStartFailed represents an error when a backend fails to start
 type ErrBackendStartFailed struct {
-	ID    string
 	Cause error
+	ID    string
 }
 
 func (e ErrBackendStartFailed) Error() string {

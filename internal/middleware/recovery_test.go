@@ -20,13 +20,14 @@ func TestRecovery(t *testing.T) {
 
 	// Create a handler that will panic
 	panicHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/panic" {
+		switch r.URL.Path {
+		case "/panic":
 			panic("test panic")
-		} else if r.URL.Path == "/panic-error" {
+		case "/panic-error":
 			panic(assert.AnError)
-		} else {
+		default:
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("success"))
+			_, _ = w.Write([]byte("success"))
 		}
 	})
 

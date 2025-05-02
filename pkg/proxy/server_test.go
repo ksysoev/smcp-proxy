@@ -17,13 +17,13 @@ import (
 
 // MockMCPBackendHandler is a mock implementation of MCPBackendHandler for testing
 type MockMCPBackendHandler struct {
-	handleCalled bool
-	startCalled  bool
-	stopCalled   bool
 	startErr     error
 	stopErr      error
 	handleReq    *http.Request
 	handleFunc   func(w http.ResponseWriter, r *http.Request)
+	handleCalled bool
+	startCalled  bool
+	stopCalled   bool
 }
 
 func (m *MockMCPBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
@@ -48,10 +48,10 @@ func (m *MockMCPBackendHandler) Stop() error {
 
 // MockTokenValidator is a mock implementation of auth.TokenValidator for testing
 type MockTokenValidator struct {
-	validateCalled bool
-	validateToken  string
-	validateClaims jwt.MapClaims
 	validateErr    error
+	validateClaims jwt.MapClaims
+	validateToken  string
+	validateCalled bool
 }
 
 func (m *MockTokenValidator) ValidateToken(ctx context.Context, token string) (jwt.MapClaims, error) {
@@ -127,11 +127,11 @@ func TestServerHealth(t *testing.T) {
 		backends:  make(map[string]MCPBackendHandler),
 		cfg: &config.ServerConfig{
 			Metrics: struct {
-				Enabled bool   "mapstructure:\"enabled\""
 				Path    string "mapstructure:\"path\""
+				Enabled bool   "mapstructure:\"enabled\""
 			}{
-				Enabled: false,
 				Path:    "/metrics",
+				Enabled: false,
 			},
 		},
 	}
@@ -160,8 +160,8 @@ func TestServerModelsEndpoint(t *testing.T) {
 		cfg: &config.ServerConfig{
 			MCP: struct {
 				Backends  []config.MCPBackend "mapstructure:\"backends\""
-				Timeout   time.Duration       "mapstructure:\"timeout\""
 				Endpoints []string            "mapstructure:\"endpoints\""
+				Timeout   time.Duration       "mapstructure:\"timeout\""
 			}{
 				Backends: []config.MCPBackend{
 					{

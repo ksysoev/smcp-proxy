@@ -90,7 +90,10 @@ func (c *Client) initRoutes() {
 	// Add health check endpoint
 	c.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, err := w.Write([]byte("OK"))
+		if err != nil {
+			c.logger.Error("Failed to write health check response", "error", err)
+		}
 	})
 
 	// Add metrics endpoint if enabled
@@ -98,7 +101,10 @@ func (c *Client) initRoutes() {
 		c.mux.HandleFunc("GET "+c.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
 			// Metrics implementation would go here
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Metrics would be here"))
+			_, err := w.Write([]byte("Metrics would be here"))
+			if err != nil {
+				c.logger.Error("Failed to write metrics response", "error", err)
+			}
 		})
 	}
 

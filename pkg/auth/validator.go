@@ -29,14 +29,14 @@ type TokenValidator interface {
 
 // OIDCTokenValidator implements TokenValidator using OIDC providers
 type OIDCTokenValidator struct {
-	issuers        []string
-	audience       string
 	requiredClaims map[string]string
 	optionalClaims map[string]string
 	providers      map[string]*oidc.Provider
 	verifiers      map[string]*oidc.IDTokenVerifier
-	mu             sync.RWMutex
 	logger         *slog.Logger
+	audience       string
+	issuers        []string
+	mu             sync.RWMutex
 }
 
 // NewOIDCTokenValidator creates a new OIDC token validator

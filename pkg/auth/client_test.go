@@ -95,8 +95,8 @@ func TestTokenTransport(t *testing.T) {
 
 // Mock token client for testing
 type mockTokenClient struct {
-	token string
 	err   error
+	token string
 }
 
 func (m *mockTokenClient) GetToken(ctx context.Context) (string, error) {

@@ -21,15 +21,16 @@ func TestRequestLogger(t *testing.T) {
 	// Create a test handler that will be wrapped by the middleware
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Test writing different status codes
-		if r.URL.Path == "/success" {
+		switch r.URL.Path {
+		case "/success":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("success"))
-		} else if r.URL.Path == "/error" {
+			_, _ = w.Write([]byte("success"))
+		case "/error":
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("error"))
-		} else if r.URL.Path == "/no-write-header" {
+			_, _ = w.Write([]byte("error"))
+		case "/no-write-header":
 			// Test implicit status code
-			w.Write([]byte("no explicit status code"))
+			_, _ = w.Write([]byte("no explicit status code"))
 		}
 	})
 

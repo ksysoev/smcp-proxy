@@ -55,7 +55,11 @@ func TestMCPProcess(t *testing.T) {
 		// Create a temporary directory for the working directory
 		tempDir, err := os.MkdirTemp("", "mcp-process-test-*")
 		require.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temporary directory: %v", err)
+			}
+		}()
 
 		// Create a configuration with working directory and environment
 		cfg := config.StdioConfig{
@@ -95,7 +99,11 @@ func TestMCPProcess(t *testing.T) {
 		// Start the process
 		err := process.Start()
 		require.NoError(t, err)
-		defer process.Stop()
+		defer func() {
+			if err := process.Stop(); err != nil {
+				t.Logf("Failed to stop process: %v", err)
+			}
+		}()
 
 		// Create a request input
 		input := map[string]interface{}{
@@ -134,7 +142,11 @@ func TestMCPProcess(t *testing.T) {
 		// Start the process
 		err := process.Start()
 		require.NoError(t, err)
-		defer process.Stop()
+		defer func() {
+			if err := process.Stop(); err != nil {
+				t.Logf("Failed to stop process: %v", err)
+			}
+		}()
 
 		// Create a context with a short timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

@@ -10,22 +10,19 @@ import (
 
 // ClientConfig holds the configuration for the proxy client
 type ClientConfig struct {
-	// Client configuration
-	Client struct {
-		Host            string        `mapstructure:"host"`
-		Port            int           `mapstructure:"port"`
-		ReadTimeout     time.Duration `mapstructure:"read_timeout"`
-		WriteTimeout    time.Duration `mapstructure:"write_timeout"`
-		ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
-	} `mapstructure:"client"`
-
-	// Server proxy configuration
+	TLS struct {
+		CertFile string `mapstructure:"cert_file"`
+		KeyFile  string `mapstructure:"key_file"`
+		Enabled  bool   `mapstructure:"enabled"`
+	} `mapstructure:"tls"`
+	Metrics struct {
+		Path    string `mapstructure:"path"`
+		Enabled bool   `mapstructure:"enabled"`
+	} `mapstructure:"metrics"`
 	Server struct {
 		URL     string        `mapstructure:"url"`
 		Timeout time.Duration `mapstructure:"timeout"`
 	} `mapstructure:"server"`
-
-	// OIDC configuration
 	OIDC struct {
 		Issuer        string        `mapstructure:"issuer"`
 		ClientID      string        `mapstructure:"client_id"`
@@ -35,19 +32,13 @@ type ClientConfig struct {
 		CacheTTL      time.Duration `mapstructure:"cache_ttl"`
 		TokenTTLDelta time.Duration `mapstructure:"token_ttl_delta"`
 	} `mapstructure:"oidc"`
-
-	// TLS configuration
-	TLS struct {
-		Enabled  bool   `mapstructure:"enabled"`
-		CertFile string `mapstructure:"cert_file"`
-		KeyFile  string `mapstructure:"key_file"`
-	} `mapstructure:"tls"`
-
-	// Metrics configuration
-	Metrics struct {
-		Enabled bool   `mapstructure:"enabled"`
-		Path    string `mapstructure:"path"`
-	} `mapstructure:"metrics"`
+	Client struct {
+		Host            string        `mapstructure:"host"`
+		Port            int           `mapstructure:"port"`
+		ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+		WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+		ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	} `mapstructure:"client"`
 }
 
 // NewClientConfig creates a new client configuration

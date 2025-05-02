@@ -54,7 +54,11 @@ func (h *StdioBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			h.logger.Warn("Failed to close request body", "error", err)
+		}
+	}()
 
 	// Parse request body as JSON
 	var inputJSON map[string]interface{}
@@ -87,7 +91,9 @@ func (h *StdioBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 	// Return the response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(responseJSON)
+	if err := json.NewEncoder(w).Encode(responseJSON); err != nil {
+		h.logger.Error("Failed to encode response", "error", err)
+	}
 }
 
 // Start initializes the backend

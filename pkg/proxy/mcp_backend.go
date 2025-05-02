@@ -50,16 +50,11 @@ func NewMCPBackendHandler(backend config.MCPBackend, logger *slog.Logger) (MCPBa
 
 // BackendModelInfo contains information about the MCP backend model
 type BackendModelInfo struct {
-	// ID is a unique identifier for the backend
-	ID string
-	// Name is a human-readable name for the backend
-	Name string
-	// Model is the Anthropic model associated with this backend
-	Model string
-	// MaxTokens is the maximum number of tokens for this model
+	ID        string
+	Name      string
+	Model     string
+	Path      string
 	MaxTokens int
-	// Path is the URL path prefix for this backend
-	Path string
 }
 
 // ListBackendModels returns a list of available backend models

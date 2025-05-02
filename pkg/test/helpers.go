@@ -49,9 +49,13 @@ func SetEnv(t *testing.T, key, value string) {
 
 	t.Cleanup(func() {
 		if exists {
-			os.Setenv(key, originalValue)
+			if err := os.Setenv(key, originalValue); err != nil {
+				t.Logf("Failed to restore environment variable %s: %v", key, err)
+			}
 		} else {
-			os.Unsetenv(key)
+			if err := os.Unsetenv(key); err != nil {
+				t.Logf("Failed to unset environment variable %s: %v", key, err)
+			}
 		}
 	})
 }
@@ -76,7 +80,9 @@ func TempFile(t *testing.T, content string) string {
 	}
 
 	t.Cleanup(func() {
-		os.Remove(path)
+		if err := os.Remove(path); err != nil {
+			t.Logf("Failed to remove temporary file %s: %v", path, err)
+		}
 	})
 
 	return path

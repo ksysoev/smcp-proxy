@@ -19,13 +19,13 @@ type TokenClient interface {
 
 // OIDCTokenClient implements TokenClient using the client credentials flow
 type OIDCTokenClient struct {
-	config        *clientcredentials.Config
-	tokenCache    string
 	tokenExpiry   time.Time
+	config        *clientcredentials.Config
+	logger        *slog.Logger
+	tokenCache    string
 	cacheTTL      time.Duration
 	tokenTTLDelta time.Duration
 	mu            sync.RWMutex
-	logger        *slog.Logger
 }
 
 // NewOIDCTokenClient creates a new OIDC token client
@@ -108,16 +108,11 @@ func (c *OIDCTokenClient) refreshToken(ctx context.Context) (string, error) {
 
 // TokenTransport is an http.RoundTripper that adds an OAuth2 token to the request
 type TokenTransport struct {
-	// Base Transport (http.DefaultTransport if nil)
-	Base   http.RoundTripper
-	Client TokenClient
-	// CacheErrors controls whether we should continue using expired tokens if we
-	// can't get a new one (to handle temporary outages of the auth server)
+	Base        http.RoundTripper
+	Client      TokenClient
+	Logger      *slog.Logger
+	LastToken   string
 	CacheErrors bool
-	// LastToken is the last successfully acquired token, used if CacheErrors is true
-	LastToken string
-	// Logger is the logger to use
-	Logger *slog.Logger
 }
 
 // RoundTrip implements http.RoundTripper, adding an OAuth2 token to the request

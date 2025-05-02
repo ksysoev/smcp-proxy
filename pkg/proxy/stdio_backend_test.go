@@ -21,12 +21,12 @@ import (
 
 // Mock MCP process for testing
 type mockMCPProcess struct {
-	started      bool
 	startErr     error
 	stopErr      error
-	requestInput map[string]interface{}
 	requestErr   error
+	requestInput map[string]interface{}
 	responseData map[string]interface{}
+	started      bool
 }
 
 func (m *mockMCPProcess) Start() error {
