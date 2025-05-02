@@ -38,8 +38,11 @@ The main goals of this project are:
 - Validates OIDC tokens from clients
 - Forwards authenticated requests to MCP server(s)
 - Configurable trusted issuer and token claim validation
-- Supports multiple MCP backends exposed under different paths
+- Supports multiple MCP backends with Anthropic-style configuration
+- Multiple transport types (HTTP and stdio) for backend servers
 - Path-based routing with optional path prefix stripping
+- Local MCP process management with stdio communication
+- Models API for discovering available models
 - Supports scalable deployment
 - Health check endpoints
 - Structured logging and metrics
@@ -87,30 +90,53 @@ mcp:
   # Global timeout for all backends (can be overridden per backend)
   timeout: "60s"
   
-  # Configure multiple MCP backends with different paths
+  # Configure multiple MCP backends
   backends:
-    # Models API backend
-    - name: "models-api"
-      url: "http://mcp-models.example.com"
-      path: "/models"
+    # HTTP backend for Claude 3 Opus
+    - id: "claude-3-opus"
+      name: "Claude 3 Opus"
+      model: "claude-3-opus-20240229"
+      max_tokens: 200000
+      transport: "http"
+      url: "http://mcp-opus.example.com"
+      path: "/v1/opus"
       strip_path: true
       timeout: "120s"  # Override global timeout
     
-    # Inference API backend
-    - name: "inference-api"
-      url: "http://mcp-inference.example.com"
-      path: "/inference"
+    # HTTP backend for Claude 3 Sonnet
+    - id: "claude-3-sonnet"
+      name: "Claude 3 Sonnet"
+      model: "claude-3-sonnet-20240229"
+      max_tokens: 180000
+      transport: "http"
+      url: "http://mcp-sonnet.example.com"
+      path: "/v1/sonnet"
       strip_path: true
     
+    # Local stdio backend for Claude 3 Haiku with subprocess
+    - id: "claude-3-haiku"
+      name: "Claude 3 Haiku"
+      model: "claude-3-haiku-20240307"
+      max_tokens: 150000
+      transport: "stdio"
+      path: "/v1/haiku"
+      strip_path: true
+      stdio:
+        command: "python"
+        args: ["-m", "anthropic.mcp_server", "--model", "claude-3-haiku-20240307"]
+        working_dir: "/opt/anthropic"
+        env:
+          ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+          PYTHONPATH: "/opt/anthropic"
+        stdio_timeout: "60s"
+    
     # Default backend for all other paths
-    - name: "default"
+    - id: "default-mcp"
+      name: "Default MCP"
+      transport: "http"
       url: "http://mcp-default.example.com"
       path: "/"
       strip_path: false
-      
-  # Legacy configuration (deprecated, use backends instead)
-  # endpoints:
-  #  - "http://localhost:9000"
 
 oidc:
   issuers:
@@ -201,32 +227,61 @@ Once both components are running:
 2. The client component authenticates with the OIDC provider and forwards requests to the server
 3. The server component validates tokens and forwards authenticated requests to the appropriate MCP backend based on the request path
 
-### Path-Based Routing
+### Multiple Backend Support
 
-The proxy server supports multiple MCP backends exposed under different paths:
+The proxy server supports multiple MCP backends with different transport types:
 
 ```
 ┌─────────────┐                  ┌───────────────────────────────┐
 │ Request to  │                  │        Proxy Server           │
-│ /models/... ├─────────────────►│                               │──► Models MCP Backend
+│ /v1/opus/.. ├─────────────────►│                               │──► HTTP Claude 3 Opus Backend
 └─────────────┘                  │                               │
                                  │                               │
 ┌─────────────┐                  │                               │
 │ Request to  │                  │    OIDC Authentication +      │
-│ /inference/ ├─────────────────►│     Path-Based Routing        │──► Inference MCP Backend
+│ /v1/sonnet/ ├─────────────────►│     Path-Based Routing        │──► HTTP Claude 3 Sonnet Backend
 └─────────────┘                  │                               │
                                  │                               │
 ┌─────────────┐                  │                               │
 │ Request to  │                  │                               │
-│ /other/...  ├─────────────────►│                               │──► Default MCP Backend
+│ /v1/haiku/  ├─────────────────►│                               │──► Stdio Claude 3 Haiku (Local Process)
 └─────────────┘                  └───────────────────────────────┘
 ```
 
+#### Path-Based Routing
+
 With the `strip_path` option enabled, the proxy will remove the path prefix before forwarding the request to the backend:
 
-- Request to `/models/my-model` → Forwarded to Models MCP as `/my-model`
-- Request to `/inference/predict` → Forwarded to Inference MCP as `/predict`
-- Request to `/other/endpoint` → Forwarded to Default MCP as `/other/endpoint` (no stripping)
+- Request to `/v1/opus/completions` → Forwarded to Opus backend as `/completions`
+- Request to `/v1/sonnet/messages` → Forwarded to Sonnet backend as `/messages`
+- Request to `/v1/haiku/chat` → Processed by local Haiku process as `/chat`
+
+#### Transport Types
+
+The proxy supports two types of backends:
+
+1. **HTTP Backends** (`transport: "http"`):
+   - Remote MCP servers accessible via HTTP
+   - Configured with a URL and standard proxy settings
+   - Example: `url: "http://mcp-opus.example.com"`
+
+2. **Stdio Backends** (`transport: "stdio"`):
+   - Local MCP servers running as subprocesses
+   - Communication via standard input/output
+   - Useful for running local model servers
+   - Example:
+     ```yaml
+     stdio:
+       command: "python"
+       args: ["-m", "anthropic.mcp_server", "--model", "claude-3-haiku"]
+       working_dir: "/opt/anthropic"
+       env:
+         ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+     ```
+
+#### Models API
+
+The proxy provides a `/api/models` endpoint that returns information about all configured backends, following the Anthropic API models format. This allows clients to discover available models and their capabilities.
 
 ## Development
 

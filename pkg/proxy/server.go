@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,6 +22,7 @@ type Server struct {
 	validator  auth.TokenValidator
 	cfg        *config.ServerConfig
 	mux        *http.ServeMux
+	backends   map[string]MCPBackendHandler
 }
 
 // NewServer creates a new proxy server
@@ -64,6 +66,7 @@ func NewServer(
 		validator:  validator,
 		cfg:        cfg,
 		mux:        mux,
+		backends:   make(map[string]MCPBackendHandler),
 	}
 
 	// Initialize routes
@@ -83,9 +86,18 @@ func (s *Server) Start() error {
 	return s.httpServer.ListenAndServe()
 }
 
-// Stop gracefully stops the proxy server
+// Stop gracefully stops the proxy server and all backends
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("Stopping server")
+
+	// Stop all backends
+	for id, backend := range s.backends {
+		if err := backend.Stop(); err != nil {
+			s.logger.Error("Failed to stop backend", "id", id, "error", err)
+		}
+	}
+
+	// Shutdown HTTP server
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -99,37 +111,69 @@ func (s *Server) initRoutes() {
 
 	// Add metrics endpoint if enabled
 	if s.cfg.Metrics.Enabled {
-		s.mux.HandleFunc("GET " + s.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
+		s.mux.HandleFunc("GET "+s.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
 			// Metrics implementation would go here
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Metrics would be here"))
 		})
 	}
 
+	// Add models info endpoint
+	s.mux.HandleFunc("GET /api/models", func(w http.ResponseWriter, r *http.Request) {
+		models := ListBackendModels(s.cfg.MCP.Backends)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "list",
+			"data":   models,
+		})
+	})
+
 	// Handle legacy endpoints configuration (for backward compatibility)
 	if len(s.cfg.MCP.Endpoints) > 0 && len(s.cfg.MCP.Backends) == 0 {
 		s.logger.Warn("Using deprecated 'endpoints' configuration. Please migrate to 'backends' configuration.")
 		// Create a root backend for each endpoint
-		for _, endpoint := range s.cfg.MCP.Endpoints {
-			s.setupMCPProxy(&config.MCPBackend{
-				Name:      "legacy",
+		for i, endpoint := range s.cfg.MCP.Endpoints {
+			backend := &config.MCPBackend{
+				ID:        fmt.Sprintf("legacy-%d", i),
+				Name:      "Legacy Backend",
+				Transport: config.HTTPTransport,
 				URL:       endpoint,
 				Path:      "/",
 				StripPath: false,
 				Timeout:   s.cfg.MCP.Timeout,
-			})
+			}
+			if err := s.setupBackendHandler(backend); err != nil {
+				s.logger.Error("Failed to setup legacy backend", "url", endpoint, "error", err)
+			}
 		}
 	} else {
-		// Create MCP reverse proxies for each backend
+		// Create handlers for each configured backend
 		for _, backend := range s.cfg.MCP.Backends {
 			// Set default timeout from global config if not set on backend
 			if backend.Timeout == 0 {
 				backend.Timeout = s.cfg.MCP.Timeout
 			}
-			s.setupMCPProxy(&backend)
+
+			// Generate an ID if not provided
+			if backend.ID == "" {
+				backend.ID = fmt.Sprintf("backend-%s", backend.Name)
+			}
+
+			// Set default transport if not provided
+			if backend.Transport == "" {
+				backend.Transport = config.HTTPTransport
+			}
+
+			if err := s.setupBackendHandler(backend); err != nil {
+				s.logger.Error("Failed to setup backend",
+					"id", backend.ID,
+					"name", backend.Name,
+					"path", backend.Path,
+					"error", err)
+			}
 		}
 	}
-	
+
 	// Catch-all handler for undefined paths
 	s.mux.HandleFunc("* /", func(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("No backend configured for path", "path", r.URL.Path)
@@ -137,93 +181,30 @@ func (s *Server) initRoutes() {
 	})
 }
 
-// setupMCPProxy creates and registers a reverse proxy for a specific MCP backend
-func (s *Server) setupMCPProxy(backend *config.MCPBackend) {
-	targetURL, err := url.Parse(backend.URL)
+// setupBackendHandler creates and registers a handler for a specific MCP backend
+func (s *Server) setupBackendHandler(backend *config.MCPBackend) error {
+	// Create the appropriate backend handler based on transport
+	handler, err := NewMCPBackendHandler(backend, s.logger)
 	if err != nil {
-		s.logger.Error("Failed to parse target URL", 
-			"name", backend.Name,
-			"url", backend.URL, 
-			"path", backend.Path,
-			"error", err)
-		return
+		return fmt.Errorf("failed to create backend handler: %w", err)
 	}
 
-	// Create the reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
-	
-	// Custom transport with timeout and instrumentation
-	transport := &http.Transport{
-		ResponseHeaderTimeout: backend.Timeout,
-		// Add other transport configurations as needed
-	}
-	
-	proxy.Transport = &instrumentedTransport{
-		base:   transport,
-		logger: s.logger.With("backend", backend.Name, "target", backend.URL),
+	// Start the backend
+	if err := handler.Start(); err != nil {
+		return ErrBackendStartFailed{ID: backend.ID, Cause: err}
 	}
 
-	// Setup director function
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		req2 := *req // Clone the request to make a copy
-		originalDirector(&req2)
-		
-		// Handle path stripping if enabled
-		if backend.StripPath && len(backend.Path) > 0 {
-			// Remove the prefix from the path
-			path := req.URL.Path
-			if strings.HasPrefix(path, backend.Path) {
-				// If the backend path is /api/v1 and the request is /api/v1/resource
-				// this will change it to /resource
-				req2.URL.Path = strings.TrimPrefix(path, backend.Path)
-				// Ensure the path starts with "/"
-				if !strings.HasPrefix(req2.URL.Path, "/") {
-					req2.URL.Path = "/" + req2.URL.Path
-				}
-				s.logger.Debug("Stripped path prefix", 
-					"original", path, 
-					"new", req2.URL.Path,
-					"backend", backend.Name)
-			}
-		}
-		
-		// Get claims from context
-		if claims, ok := req.Context().Value(auth.ClaimsContextKey).(map[string]interface{}); ok {
-			// Add useful claims as headers if needed
-			if sub, ok := claims["sub"].(string); ok {
-				req2.Header.Set("X-Subject", sub)
-			}
-			if email, ok := claims["email"].(string); ok {
-				req2.Header.Set("X-Email", email)
-			}
-		}
+	// Store the handler for later reference
+	s.backends[backend.ID] = handler
 
-		// Remove authentication header to prevent forwarding it
-		req2.Header.Del("Authorization")
-		
-		// Add backend information
-		req2.Header.Set("X-Proxy-Backend", backend.Name)
-		
-		*req = req2
-	}
+	// Register handler with auth middleware for this path
+	s.logger.Info("Registering backend",
+		"id", backend.ID,
+		"name", backend.Name,
+		"path", backend.Path,
+		"transport", backend.Transport,
+		"strip_path", backend.StripPath)
 
-	// Setup error handler
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		s.logger.Error("Proxy error", 
-			"error", err, 
-			"path", r.URL.Path, 
-			"backend", backend.Name)
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-	}
-
-	// Register proxy handler with auth middleware for this path
-	s.logger.Info("Registering backend", 
-		"name", backend.Name, 
-		"path", backend.Path, 
-		"target", backend.URL,
-		"strip_prefix", backend.StripPath)
-	
 	// Create pattern based on the backend path
 	pattern := "* " + backend.Path
 	if !strings.HasSuffix(backend.Path, "/") {
@@ -231,8 +212,16 @@ func (s *Server) setupMCPProxy(backend *config.MCPBackend) {
 		pattern += "/"
 	}
 	pattern += "*"
-	
-	s.mux.Handle(pattern, auth.AuthMiddleware(s.validator)(proxy))
+
+	// Create handler function
+	handlerFunc := func(w http.ResponseWriter, r *http.Request) {
+		handler.Handle(w, r)
+	}
+
+	// Register handler with auth middleware
+	s.mux.Handle(pattern, auth.AuthMiddleware(s.validator)(http.HandlerFunc(handlerFunc)))
+
+	return nil
 }
 
 // instrumentedTransport is an http.RoundTripper that logs requests and responses
@@ -246,9 +235,9 @@ func (t *instrumentedTransport) RoundTrip(req *http.Request) (*http.Response, er
 	start := time.Now()
 
 	// Log the request
-	t.logger.Debug("Proxy request", 
-		"method", req.Method, 
-		"path", req.URL.Path, 
+	t.logger.Debug("Proxy request",
+		"method", req.Method,
+		"path", req.URL.Path,
 		"remote_addr", req.RemoteAddr)
 
 	// Send the request

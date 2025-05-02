@@ -7,18 +7,56 @@ import (
 	"github.com/spf13/viper"
 )
 
+// TransportType represents the type of transport to use for the MCP backend
+type TransportType string
+
+const (
+	// HTTPTransport represents an HTTP transport for remote MCP servers
+	HTTPTransport TransportType = "http"
+	// StdioTransport represents a stdio transport for local MCP servers
+	StdioTransport TransportType = "stdio"
+)
+
+// StdioConfig holds configuration for a stdio transport
+type StdioConfig struct {
+	// Command is the command to execute for the local MCP server
+	Command string `mapstructure:"command"`
+	// Args are the arguments to pass to the command
+	Args []string `mapstructure:"args"`
+	// WorkingDir is the working directory for the command
+	WorkingDir string `mapstructure:"working_dir"`
+	// Env is a map of environment variables to set for the command
+	Env map[string]string `mapstructure:"env"`
+	// StdioTimeout is the timeout for stdio operations
+	StdioTimeout time.Duration `mapstructure:"stdio_timeout"`
+}
+
 // MCPBackend defines configuration for a single MCP backend server
 type MCPBackend struct {
-	// Name is a unique identifier for this backend
+	// ID is a unique identifier for this backend
+	ID string `mapstructure:"id"`
+	// Name is a human-readable name for this backend
 	Name string `mapstructure:"name"`
-	// URL is the backend server URL
+	// Transport is the type of transport to use (http or stdio)
+	Transport TransportType `mapstructure:"transport"`
+	
+	// HTTP Transport specific fields
 	URL string `mapstructure:"url"`
+	
+	// Stdio Transport specific fields
+	Stdio StdioConfig `mapstructure:"stdio"`
+	
+	// Common fields
 	// Path is the URL path prefix to match for this backend (e.g., "/api/v1")
 	Path string `mapstructure:"path"`
 	// StripPath determines whether to strip the path prefix before forwarding
 	StripPath bool `mapstructure:"strip_path"`
 	// Timeout overrides the global timeout for this backend
 	Timeout time.Duration `mapstructure:"timeout"`
+	// Model is the Anthropic model associated with this backend (e.g., "claude-3-opus-20240229")
+	Model string `mapstructure:"model"`
+	// MaxTokens is the maximum number of tokens for this model
+	MaxTokens int `mapstructure:"max_tokens"`
 }
 
 // ServerConfig holds the configuration for the proxy server
