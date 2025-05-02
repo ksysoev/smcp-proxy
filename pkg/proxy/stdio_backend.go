@@ -1,26 +1,33 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ksysoev/smcp-proxy/pkg/auth"
 	"github.com/ksysoev/smcp-proxy/pkg/config"
 )
 
+// MCPProcessInterface defines the interface for interacting with an MCP process
+type MCPProcessInterface interface {
+	Start() error
+	Stop() error
+	Request(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error)
+}
+
 // StdioBackendHandler handles requests to a stdio-based MCP backend
 type StdioBackendHandler struct {
 	backend *config.MCPBackend
-	process *MCPProcess
+	process MCPProcessInterface
 	logger  *slog.Logger
 }
 
 // NewStdioBackendHandler creates a new stdio backend handler
-func NewStdioBackendHandler(backend *config.MCPBackend, logger *slog.Logger) (*StdioBackendHandler, error) {
+func NewStdioBackendHandler(backend config.MCPBackend, logger *slog.Logger) (*StdioBackendHandler, error) {
 	// Validate backend configuration
 	if backend.Stdio.Command == "" {
 		return nil, ErrInvalidBackendConfig("command is required for stdio transport")
@@ -29,8 +36,10 @@ func NewStdioBackendHandler(backend *config.MCPBackend, logger *slog.Logger) (*S
 	// Create MCP process manager
 	process := NewMCPProcess(backend.ID, backend.Stdio, logger)
 
+	// Create a copy of the backend to store as a pointer
+	backendCopy := backend
 	return &StdioBackendHandler{
-		backend: backend,
+		backend: &backendCopy,
 		process: process,
 		logger:  logger.With("backend", backend.ID, "transport", "stdio"),
 	}, nil
@@ -50,86 +59,45 @@ func (h *StdioBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	// Parse request body as JSON
 	var inputJSON map[string]interface{}
 	if err := json.Unmarshal(body, &inputJSON); err != nil {
-		h.logger.Error("Failed to parse request body", "error", err)
+		h.logger.Error("Failed to parse request body as JSON", "error", err)
 		http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
 		return
 	}
 
-	// Get path for routing
-	path := r.URL.Path
-	if h.backend.StripPath && strings.HasPrefix(path, h.backend.Path) {
-		path = strings.TrimPrefix(path, h.backend.Path)
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-	}
-	inputJSON["path"] = path
-
-	// Add headers to input JSON
-	headers := make(map[string]string)
-	for key, values := range r.Header {
-		if len(values) > 0 {
-			headers[key] = values[0]
-		}
-	}
-	inputJSON["headers"] = headers
-
-	// Add user information from claims
-	if claims, ok := r.Context().Value(auth.ClaimsContextKey).(map[string]interface{}); ok {
-		inputJSON["user"] = claims
-	}
-
-	// Set model if specified
-	if h.backend.Model != "" {
+	// Add model if not specified
+	if _, ok := inputJSON["model"]; !ok && h.backend.Model != "" {
 		inputJSON["model"] = h.backend.Model
 	}
 
-	// Add method
-	inputJSON["method"] = r.Method
+	// Add user info from auth context if available
+	if claims, ok := r.Context().Value(auth.ClaimsContextKey).(jwt.MapClaims); ok {
+		if sub, ok := claims["sub"].(string); ok {
+			inputJSON["user"] = sub
+		}
+	}
 
-	// Make the request to the MCP process
-	response, err := h.process.Request(r.Context(), inputJSON)
+	// Process the request
+	h.logger.Debug("Sending request to MCP process", "request", inputJSON)
+	responseJSON, err := h.process.Request(r.Context(), inputJSON)
 	if err != nil {
-		h.logger.Error("MCP process request failed", "error", err, "path", path)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		h.logger.Error("Failed to process request", "error", err)
+		http.Error(w, "Failed to process request: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Set response headers if provided
-	if responseHeaders, ok := response["headers"].(map[string]interface{}); ok {
-		for key, value := range responseHeaders {
-			if strValue, ok := value.(string); ok {
-				w.Header().Set(key, strValue)
-			}
-		}
-		delete(response, "headers")
-	}
-
-	// Set status code if provided
-	status := http.StatusOK
-	if statusCode, ok := response["status"].(float64); ok {
-		status = int(statusCode)
-		delete(response, "status")
-	}
-
-	// Write response
+	// Return the response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(responseJSON)
 }
 
-// Start initializes the stdio backend by starting the MCP process
+// Start initializes the backend
 func (h *StdioBackendHandler) Start() error {
-	h.logger.Info("Starting stdio backend",
-		"id", h.backend.ID,
-		"name", h.backend.Name,
-		"command", h.backend.Stdio.Command,
-		"path", h.backend.Path)
+	h.logger.Info("Starting stdio backend", "command", h.backend.Stdio.Command)
 	return h.process.Start()
 }
 
-// Stop gracefully shuts down the stdio backend
+// Stop gracefully shuts down the backend
 func (h *StdioBackendHandler) Stop() error {
-	h.logger.Info("Stopping stdio backend", "id", h.backend.ID)
+	h.logger.Info("Stopping stdio backend")
 	return h.process.Stop()
 }

@@ -3,9 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/test"
 

@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/config"
 	"github.com/ksysoev/smcp-proxy/pkg/proxy"

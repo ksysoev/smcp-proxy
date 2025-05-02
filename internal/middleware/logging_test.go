@@ -5,12 +5,10 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/test"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRequestLogger(t *testing.T) {

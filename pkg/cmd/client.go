@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/config"
 	"github.com/ksysoev/smcp-proxy/pkg/proxy"

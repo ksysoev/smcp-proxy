@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
 	"time"
 
@@ -142,7 +140,10 @@ func (s *Server) initRoutes() {
 				StripPath: false,
 				Timeout:   s.cfg.MCP.Timeout,
 			}
-			if err := s.setupBackendHandler(backend); err != nil {
+			// Fix: Use the backend directly without taking its address
+			// Create a copy of the backend struct to pass
+			backendCopy := *backend
+			if err := s.setupBackendHandler(backendCopy); err != nil {
 				s.logger.Error("Failed to setup legacy backend", "url", endpoint, "error", err)
 			}
 		}
@@ -164,6 +165,7 @@ func (s *Server) initRoutes() {
 				backend.Transport = config.HTTPTransport
 			}
 
+			// Fix: Use the backend directly without creating a pointer to a pointer
 			if err := s.setupBackendHandler(backend); err != nil {
 				s.logger.Error("Failed to setup backend",
 					"id", backend.ID,
@@ -182,7 +184,7 @@ func (s *Server) initRoutes() {
 }
 
 // setupBackendHandler creates and registers a handler for a specific MCP backend
-func (s *Server) setupBackendHandler(backend *config.MCPBackend) error {
+func (s *Server) setupBackendHandler(backend config.MCPBackend) error {
 	// Create the appropriate backend handler based on transport
 	handler, err := NewMCPBackendHandler(backend, s.logger)
 	if err != nil {

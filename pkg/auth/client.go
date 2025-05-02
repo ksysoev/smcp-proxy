@@ -116,7 +116,8 @@ type TokenTransport struct {
 	CacheErrors bool
 	// LastToken is the last successfully acquired token, used if CacheErrors is true
 	LastToken string
-	logger    *slog.Logger
+	// Logger is the logger to use
+	Logger *slog.Logger
 }
 
 // RoundTrip implements http.RoundTripper, adding an OAuth2 token to the request
@@ -127,7 +128,9 @@ func (t *TokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if t.CacheErrors && t.LastToken != "" {
 			// Use the last token if we can't get a new one
 			token = t.LastToken
-			t.logger.Warn("Using cached token due to error getting new token", "error", err)
+			if t.Logger != nil {
+				t.Logger.Warn("Using cached token due to error getting new token", "error", err)
+			}
 		} else {
 			return nil, fmt.Errorf("failed to get token: %w", err)
 		}

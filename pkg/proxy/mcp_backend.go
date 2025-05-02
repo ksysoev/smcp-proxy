@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,8 +18,16 @@ type MCPBackendHandler interface {
 	Stop() error
 }
 
+// Allow tests to override this function
+var testMockHandler MCPBackendHandler
+
 // NewMCPBackendHandler creates a new MCP backend handler based on the transport type
-func NewMCPBackendHandler(backend *config.MCPBackend, logger *slog.Logger) (MCPBackendHandler, error) {
+func NewMCPBackendHandler(backend config.MCPBackend, logger *slog.Logger) (MCPBackendHandler, error) {
+	// Check if we're in a test with a mock handler
+	if testMockHandler != nil {
+		return testMockHandler, nil
+	}
+
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -56,17 +63,38 @@ type BackendModelInfo struct {
 }
 
 // ListBackendModels returns a list of available backend models
-func ListBackendModels(backends []*config.MCPBackend) []BackendModelInfo {
-	models := make([]BackendModelInfo, 0, len(backends))
+// Modified to accept []*config.MCPBackend as well as []config.MCPBackend
+func ListBackendModels(backends interface{}) []BackendModelInfo {
+	var models []BackendModelInfo
 
-	for _, backend := range backends {
-		models = append(models, BackendModelInfo{
-			ID:        backend.ID,
-			Name:      backend.Name,
-			Model:     backend.Model,
-			MaxTokens: backend.MaxTokens,
-			Path:      backend.Path,
-		})
+	// Handle different types of backends parameter
+	switch b := backends.(type) {
+	case []config.MCPBackend:
+		models = make([]BackendModelInfo, 0, len(b))
+		for i := range b {
+			backend := &b[i]
+			models = append(models, BackendModelInfo{
+				ID:        backend.ID,
+				Name:      backend.Name,
+				Model:     backend.Model,
+				MaxTokens: backend.MaxTokens,
+				Path:      backend.Path,
+			})
+		}
+	case []*config.MCPBackend:
+		models = make([]BackendModelInfo, 0, len(b))
+		for _, backend := range b {
+			models = append(models, BackendModelInfo{
+				ID:        backend.ID,
+				Name:      backend.Name,
+				Model:     backend.Model,
+				MaxTokens: backend.MaxTokens,
+				Path:      backend.Path,
+			})
+		}
+	default:
+		// Return empty slice for unsupported types
+		models = []BackendModelInfo{}
 	}
 
 	return models

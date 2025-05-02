@@ -6,7 +6,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/auth"
 	"github.com/ksysoev/smcp-proxy/pkg/config"
@@ -20,7 +19,7 @@ type HTTPBackendHandler struct {
 }
 
 // NewHTTPBackendHandler creates a new HTTP backend handler
-func NewHTTPBackendHandler(backend *config.MCPBackend, logger *slog.Logger) (*HTTPBackendHandler, error) {
+func NewHTTPBackendHandler(backend config.MCPBackend, logger *slog.Logger) (*HTTPBackendHandler, error) {
 	// Validate backend configuration
 	if backend.URL == "" {
 		return nil, ErrInvalidBackendConfig("URL is required for HTTP transport")
@@ -103,9 +102,10 @@ func NewHTTPBackendHandler(backend *config.MCPBackend, logger *slog.Logger) (*HT
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 	}
 
+	// Create a copy of the backend to store as a p
 	return &HTTPBackendHandler{
 		backend: backend,
-		proxy:   proxy,
+		backend: &backendCopy,
 		logger:  logger.With("backend", backend.ID, "transport", "http"),
 	}, nil
 }
@@ -117,10 +117,10 @@ func (h *HTTPBackendHandler) Handle(w http.ResponseWriter, r *http.Request) {
 
 // Start initializes the HTTP backend
 func (h *HTTPBackendHandler) Start() error {
+	h.logger.Info("Starting HTTP backend", 
 	h.logger.Info("Starting HTTP backend",
 		"id", h.backend.ID,
 		"name", h.backend.Name,
-		"url", h.backend.URL,
 		"path", h.backend.Path)
 	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/auth"
 	"github.com/ksysoev/smcp-proxy/pkg/config"
@@ -15,11 +14,11 @@ import (
 
 // Client represents the proxy client
 type Client struct {
-	httpServer *http.Server
-	logger     *slog.Logger
+	httpServer  *http.Server
+	logger      *slog.Logger
 	tokenClient auth.TokenClient
-	cfg        *config.ClientConfig
-	mux        *http.ServeMux
+	cfg         *config.ClientConfig
+	mux         *http.ServeMux
 }
 
 // NewClient creates a new proxy client
@@ -96,7 +95,7 @@ func (c *Client) initRoutes() {
 
 	// Add metrics endpoint if enabled
 	if c.cfg.Metrics.Enabled {
-		c.mux.HandleFunc("GET " + c.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
+		c.mux.HandleFunc("GET "+c.cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
 			// Metrics implementation would go here
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Metrics would be here"))
@@ -118,7 +117,7 @@ func (c *Client) initRoutes() {
 		Base:        http.DefaultTransport,
 		Client:      c.tokenClient,
 		CacheErrors: true,
-		logger:      c.logger,
+		Logger:      c.logger,
 	}
 
 	// Create instrumented transport wrapping the token transport

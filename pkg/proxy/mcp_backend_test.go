@@ -22,7 +22,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 
@@ -43,7 +43,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			},
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 
@@ -60,7 +60,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 	})
@@ -73,7 +73,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 	})
@@ -86,7 +86,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 
@@ -106,7 +106,7 @@ func TestNewMCPBackendHandler(t *testing.T) {
 			},
 		}
 
-		handler, err := NewMCPBackendHandler(backend, logger)
+		handler, err := NewMCPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 

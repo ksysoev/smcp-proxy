@@ -30,7 +30,7 @@ func TestHTTPBackendHandler(t *testing.T) {
 			Timeout:   30 * time.Second,
 		}
 
-		handler, err := NewHTTPBackendHandler(backend, logger)
+		handler, err := NewHTTPBackendHandler(*backend, logger)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 
@@ -46,7 +46,7 @@ func TestHTTPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewHTTPBackendHandler(backend, logger)
+		handler, err := NewHTTPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 
@@ -63,7 +63,7 @@ func TestHTTPBackendHandler(t *testing.T) {
 			Path:      "/test",
 		}
 
-		handler, err := NewHTTPBackendHandler(backend, logger)
+		handler, err := NewHTTPBackendHandler(*backend, logger)
 		require.Error(t, err)
 		require.Nil(t, handler)
 	})
@@ -88,7 +88,7 @@ func TestHTTPBackendHandler(t *testing.T) {
 			Model:     "claude-3",
 		}
 
-		handler, err := NewHTTPBackendHandler(backend, logger)
+		handler, err := NewHTTPBackendHandler(*backend, logger)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 
@@ -143,7 +143,7 @@ func TestHTTPBackendHandler(t *testing.T) {
 			StripPath: false,
 		}
 
-		handler, err := NewHTTPBackendHandler(backend, logger)
+		handler, err := NewHTTPBackendHandler(*backend, logger)
 		require.NoError(t, err)
 		require.NotNil(t, handler)
 
