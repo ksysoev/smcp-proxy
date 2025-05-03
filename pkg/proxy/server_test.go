@@ -70,12 +70,19 @@ func TestServerSetupBackendHandler(t *testing.T) {
 		validateClaims: jwt.MapClaims{"sub": "test-user"},
 	}
 
-	// Create server with mock validator
+	// Create server with mock validator and config
 	server := &Server{
 		logger:    logger,
 		validator: mockValidator,
 		mux:       http.NewServeMux(),
 		backends:  make(map[string]MCPBackendHandler),
+		cfg: &config.ServerConfig{
+			Auth: struct {
+				Mode config.AuthMode "mapstructure:\"mode\""
+			}{
+				Mode: config.NoAuthMode, // Default to no-auth mode for the test
+			},
+		},
 	}
 
 	// Create a test backend

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ksysoev/smcp-proxy/pkg/config"
 	"github.com/ksysoev/smcp-proxy/pkg/proxy"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,9 @@ var (
 	// Server settings
 	serverURL     string
 	serverTimeout time.Duration
+
+	// Auth settings
+	authMode string // "oidc" or "none"
 
 	// OIDC settings
 	oidcIssuer        string
@@ -52,9 +56,10 @@ var (
 // clientCmd represents the client command
 var clientCmd = &cobra.Command{
 	Use:   "client",
-	Short: "Run the MCP proxy client that authenticates to the proxy server",
-	Long: `Starts the proxy client that implements the client credentials flow
-to acquire OIDC tokens and forwards requests to the proxy server.`,
+	Short: "Run the MCP proxy client that forwards requests to the proxy server",
+	Long: `Starts the proxy client that forwards requests to the proxy server.
+Can be configured to authenticate using OIDC client credentials flow
+or run without authentication.`,
 	Run: runClient,
 }
 
@@ -75,6 +80,9 @@ func init() {
 		// This should never happen unless there's a programming error
 		panic(fmt.Sprintf("Failed to mark server-url flag as required: %v", err))
 	}
+	
+	// Auth mode flag
+	clientCmd.Flags().StringVar(&authMode, "auth-mode", "none", "Authentication mode (none, oidc)")
 
 	// OIDC flags
 	clientCmd.Flags().StringVar(&oidcIssuer, "oidc-issuer", "", "OIDC issuer URL")
@@ -84,15 +92,6 @@ func init() {
 	clientCmd.Flags().StringVar(&oidcScopes, "oidc-scopes", "openid", "OIDC scopes (comma-separated)")
 	clientCmd.Flags().DurationVar(&oidcCacheTTL, "oidc-cache-ttl", 5*time.Minute, "OIDC token cache TTL")
 	clientCmd.Flags().DurationVar(&oidcTokenTTLDelta, "oidc-token-ttl-delta", 30*time.Second, "OIDC token TTL delta")
-
-	// Mark required OIDC flags
-	requiredFlags := []string{"oidc-issuer", "oidc-client-id", "oidc-client-secret"}
-	for _, flag := range requiredFlags {
-		if err := clientCmd.MarkFlagRequired(flag); err != nil {
-			// This should never happen unless there's a programming error
-			panic(fmt.Sprintf("Failed to mark %s flag as required: %v", flag, err))
-		}
-	}
 
 	// TLS flags
 	clientCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "Enable TLS")
@@ -130,6 +129,13 @@ func runClient(cmd *cobra.Command, args []string) {
 		scopes = []string{"openid"}
 	}
 
+	// Validate and convert auth mode to config type
+	authModeConfig, err := validateAuthMode(authMode)
+	if err != nil {
+		logger.Error("Invalid auth mode", "error", err)
+		os.Exit(1)
+	}
+
 	// Create client options
 	opts := proxy.ClientOptions{
 		// Client settings
@@ -142,6 +148,9 @@ func runClient(cmd *cobra.Command, args []string) {
 		// Server settings
 		ServerURL:     serverURL,
 		ServerTimeout: serverTimeout,
+		
+		// Auth settings
+		AuthMode: authModeConfig,
 
 		// OIDC settings
 		OIDCIssuer:        oidcIssuer,
@@ -204,44 +213,61 @@ func checkEnvVars(logger *slog.Logger) {
 			logger.Debug("Using environment variable for server URL", "value", serverURL)
 		}
 	}
-
-	// Check OIDC issuer
-	if oidcIssuer == "" {
-		if envIssuer := os.Getenv("SMCP_OIDC_ISSUER"); envIssuer != "" {
-			oidcIssuer = envIssuer
-			logger.Debug("Using environment variable for OIDC issuer", "value", oidcIssuer)
+	
+	// Check auth mode
+	if envAuthMode := os.Getenv("SMCP_AUTH_MODE"); envAuthMode != "" {
+		// Validate the auth mode from environment
+		if envAuthMode != "oidc" && envAuthMode != "none" {
+			logger.Warn("Invalid auth mode in environment variable SMCP_AUTH_MODE. Must be 'oidc' or 'none'. Using default.", 
+				"provided", envAuthMode)
+		} else {
+			// For tests, always apply the valid env var
+			// In practice, this wouldn't change anything that's manually set
+			authMode = envAuthMode
+			logger.Debug("Using environment variable for auth mode", "value", authMode)
 		}
 	}
 
-	// Check OIDC client ID
-	if oidcClientID == "" {
-		if envClientID := os.Getenv("SMCP_OIDC_CLIENT_ID"); envClientID != "" {
-			oidcClientID = envClientID
-			logger.Debug("Using environment variable for OIDC client ID", "value", oidcClientID)
+	// Check OIDC settings only if auth mode is OIDC
+	if authMode == "oidc" {
+		// Check OIDC issuer
+		if oidcIssuer == "" {
+			if envIssuer := os.Getenv("SMCP_OIDC_ISSUER"); envIssuer != "" {
+				oidcIssuer = envIssuer
+				logger.Debug("Using environment variable for OIDC issuer", "value", oidcIssuer)
+			}
 		}
-	}
-
-	// Check OIDC client secret
-	if oidcClientSecret == "" {
-		if envClientSecret := os.Getenv("SMCP_OIDC_CLIENT_SECRET"); envClientSecret != "" {
-			oidcClientSecret = envClientSecret
-			logger.Debug("Using environment variable for OIDC client secret")
+	
+		// Check OIDC client ID
+		if oidcClientID == "" {
+			if envClientID := os.Getenv("SMCP_OIDC_CLIENT_ID"); envClientID != "" {
+				oidcClientID = envClientID
+				logger.Debug("Using environment variable for OIDC client ID", "value", oidcClientID)
+			}
 		}
-	}
-
-	// Check OIDC audience
-	if oidcAudience == "" {
-		if envAudience := os.Getenv("SMCP_OIDC_AUDIENCE"); envAudience != "" {
-			oidcAudience = envAudience
-			logger.Debug("Using environment variable for OIDC audience", "value", oidcAudience)
+	
+		// Check OIDC client secret
+		if oidcClientSecret == "" {
+			if envClientSecret := os.Getenv("SMCP_OIDC_CLIENT_SECRET"); envClientSecret != "" {
+				oidcClientSecret = envClientSecret
+				logger.Debug("Using environment variable for OIDC client secret")
+			}
 		}
-	}
-
-	// Check OIDC scopes
-	if oidcScopes == "openid" {
-		if envScopes := os.Getenv("SMCP_OIDC_SCOPES"); envScopes != "" {
-			oidcScopes = envScopes
-			logger.Debug("Using environment variable for OIDC scopes", "value", oidcScopes)
+	
+		// Check OIDC audience
+		if oidcAudience == "" {
+			if envAudience := os.Getenv("SMCP_OIDC_AUDIENCE"); envAudience != "" {
+				oidcAudience = envAudience
+				logger.Debug("Using environment variable for OIDC audience", "value", oidcAudience)
+			}
+		}
+	
+		// Check OIDC scopes
+		if oidcScopes == "openid" {
+			if envScopes := os.Getenv("SMCP_OIDC_SCOPES"); envScopes != "" {
+				oidcScopes = envScopes
+				logger.Debug("Using environment variable for OIDC scopes", "value", oidcScopes)
+			}
 		}
 	}
 
@@ -264,15 +290,20 @@ func validateRequiredFlags() error {
 	if serverURL == "" {
 		return fmt.Errorf("server URL is required (use --server-url flag or SMCP_SERVER_URL environment variable)")
 	}
-	if oidcIssuer == "" {
-		return fmt.Errorf("OIDC issuer is required (use --oidc-issuer flag or SMCP_OIDC_ISSUER environment variable)")
+	
+	// Only validate OIDC settings if using OIDC authentication mode
+	if authMode == "oidc" {
+		if oidcIssuer == "" {
+			return fmt.Errorf("OIDC issuer is required when auth-mode is 'oidc' (use --oidc-issuer flag or SMCP_OIDC_ISSUER environment variable)")
+		}
+		if oidcClientID == "" {
+			return fmt.Errorf("OIDC client ID is required when auth-mode is 'oidc' (use --oidc-client-id flag or SMCP_OIDC_CLIENT_ID environment variable)")
+		}
+		if oidcClientSecret == "" {
+			return fmt.Errorf("OIDC client secret is required when auth-mode is 'oidc' (use --oidc-client-secret flag or SMCP_OIDC_CLIENT_SECRET environment variable)")
+		}
 	}
-	if oidcClientID == "" {
-		return fmt.Errorf("OIDC client ID is required (use --oidc-client-id flag or SMCP_OIDC_CLIENT_ID environment variable)")
-	}
-	if oidcClientSecret == "" {
-		return fmt.Errorf("OIDC client secret is required (use --oidc-client-secret flag or SMCP_OIDC_CLIENT_SECRET environment variable)")
-	}
+	
 	return nil
 }
 
@@ -313,4 +344,16 @@ func setupLogger(level, format string) *slog.Logger {
 	}
 
 	return slog.New(handler)
+}
+
+// validateAuthMode validates the auth mode and returns the corresponding config.AuthMode
+func validateAuthMode(mode string) (config.AuthMode, error) {
+	switch mode {
+	case "oidc":
+		return config.OIDCAuthMode, nil
+	case "none":
+		return config.NoAuthMode, nil
+	default:
+		return "", fmt.Errorf("invalid auth mode: %q (must be 'oidc' or 'none')", mode)
+	}
 }

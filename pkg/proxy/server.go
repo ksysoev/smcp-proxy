@@ -33,17 +33,25 @@ func NewServer(
 		logger = slog.Default()
 	}
 
-	// Create the token validator
-	validator, err := auth.NewOIDCTokenValidator(
-		ctx,
-		cfg.OIDC.Issuers,
-		cfg.OIDC.Audience,
-		cfg.OIDC.RequiredClaims,
-		cfg.OIDC.OptionalClaims,
-		logger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create token validator: %w", err)
+	// Create the appropriate token validator based on auth mode
+	var validator auth.TokenValidator
+	if cfg.Auth.Mode == config.OIDCAuthMode {
+		// Create OIDC token validator
+		oidcValidator, err := auth.NewOIDCTokenValidator(
+			ctx,
+			cfg.OIDC.Issuers,
+			cfg.OIDC.Audience,
+			cfg.OIDC.RequiredClaims,
+			cfg.OIDC.OptionalClaims,
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OIDC token validator: %w", err)
+		}
+		validator = oidcValidator
+	} else {
+		// Create no-op token validator for no-auth mode
+		validator = auth.NewNoAuthValidator()
 	}
 
 	// Create server
@@ -222,8 +230,14 @@ func (s *Server) setupBackendHandler(backend config.MCPBackend) error {
 		handler.Handle(w, r)
 	}
 
-	// Register handler with auth middleware
-	s.mux.Handle(pattern, auth.AuthMiddleware(s.validator)(http.HandlerFunc(handlerFunc)))
+	// Apply appropriate middleware based on auth mode
+	if s.cfg.Auth.Mode == config.OIDCAuthMode {
+		// Apply auth middleware for OIDC mode
+		s.mux.Handle(pattern, auth.AuthMiddleware(s.validator)(http.HandlerFunc(handlerFunc)))
+	} else {
+		// Apply no-auth middleware for none mode
+		s.mux.Handle(pattern, auth.NoAuthMiddleware(http.HandlerFunc(handlerFunc)))
+	}
 
 	return nil
 }

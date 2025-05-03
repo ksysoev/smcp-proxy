@@ -50,10 +50,12 @@ The main goals of this project are:
 ## Features
 
 ### Server-side (Proxy Server)
-- Validates OIDC tokens from clients
-- Forwards authenticated requests to MCP server(s)
-- Configurable trusted issuer and token claim validation
-- Supports multiple MCP backends with Anthropic-style configuration
+- Configurable authentication modes (none, OIDC)
+- When OIDC is enabled:
+  - Validates OIDC tokens from clients
+  - Configurable trusted issuer and token claim validation
+- Forwards requests to MCP server(s)
+- Supports multiple MCP backends
 - Multiple transport types (HTTP and stdio) for backend servers
 - Path-based routing with optional path prefix stripping
 - Local MCP process management with stdio communication
@@ -63,10 +65,12 @@ The main goals of this project are:
 - Structured logging and metrics
 
 ### Client-side (Proxy Client)
-- Implements client credentials flow to acquire tokens
-- Acts as a local unauthenticated MCP service
+- Configurable authentication modes (none, OIDC)
+- When OIDC is enabled:
+  - Implements client credentials flow to acquire tokens
+  - Automatic token refresh
+- Acts as a local MCP service
 - Proxies requests to the server-side component
-- Automatic token refresh
 - Health check endpoints
 - Structured logging
 
@@ -98,6 +102,11 @@ server:
   write_timeout: "30s"
   shutdown_timeout: "10s"
 
+# Authentication configuration (default: none)
+auth:
+  # Mode can be "none" or "oidc"
+  mode: "none"
+
 mcp:
   # Global timeout for all backends (can be overridden per backend)
   timeout: "60s"
@@ -126,6 +135,7 @@ mcp:
         args: ["run", "-i", "-v", "claude-memory:/app/dist", "--rm", "mcp/memory"]
         stdio_timeout: "60s"
 
+# OIDC settings (only used when auth.mode is "oidc")
 oidc:
   issuers:
     - "https://your-identity-provider.com"  # Replace with your actual OIDC issuer URL
@@ -167,10 +177,13 @@ Server flags:
   --server-url string            URL of the proxy server (required)
   --server-timeout duration      Timeout for requests to the server (default 60s)
 
-OIDC flags:
-  --oidc-issuer string           OIDC issuer URL (required)
-  --oidc-client-id string        OIDC client ID (required)
-  --oidc-client-secret string    OIDC client secret (required)
+Auth flags:
+  --auth-mode string             Authentication mode (none, oidc) (default "none")
+
+OIDC flags (only used when auth-mode is "oidc"):
+  --oidc-issuer string           OIDC issuer URL
+  --oidc-client-id string        OIDC client ID
+  --oidc-client-secret string    OIDC client secret
   --oidc-audience string         OIDC audience
   --oidc-scopes string           OIDC scopes (comma-separated) (default "openid")
   --oidc-cache-ttl duration      OIDC token cache TTL (default 5m0s)
@@ -197,6 +210,11 @@ All command-line options can also be set using environment variables with the pr
 ```sh
 # Required configuration
 export SMCP_SERVER_URL="http://localhost:8080"
+
+# Authentication mode (default is "none")
+export SMCP_AUTH_MODE="none" # or "oidc"
+
+# OIDC settings (only needed if SMCP_AUTH_MODE="oidc")
 export SMCP_OIDC_ISSUER="https://your-identity-provider.com"
 export SMCP_OIDC_CLIENT_ID="your-client-id"
 export SMCP_OIDC_CLIENT_SECRET="your-client-secret"
@@ -214,24 +232,48 @@ The server configuration still uses YAML files and can be overridden using envir
 
 ### Starting the Server
 
+#### With Authentication Disabled (Default)
+
 ```sh
-# Run the server
+# Run the server without authentication
 ./smcp-proxy server --config=configs/proxy-server.yml --log-level=debug
+```
+
+#### With OIDC Authentication
+
+```sh
+# Run the server with OIDC authentication
+./smcp-proxy server --config=configs/proxy-server.yml --auth-mode=oidc --log-level=debug
 ```
 
 ### Starting the Client
 
+#### Without Authentication (Default)
+
 ```sh
-# Run the client with command line arguments
+# Run the client without authentication
+./smcp-proxy client --server-url="http://localhost:8080" --log-level=debug
+
+# Or using environment variables
+export SMCP_SERVER_URL="http://localhost:8080"
+./smcp-proxy client --log-level=debug
+```
+
+#### With OIDC Authentication
+
+```sh
+# Run the client with OIDC authentication
 ./smcp-proxy client \
+    --auth-mode=oidc \
     --server-url="http://localhost:8080" \
     --oidc-issuer="https://your-identity-provider.com" \
     --oidc-client-id="your-client-id" \
     --oidc-client-secret="your-client-secret" \
     --log-level=debug
 
-# Alternatively, use environment variables
+# Or using environment variables
 export SMCP_SERVER_URL="http://localhost:8080"
+export SMCP_AUTH_MODE="oidc"
 export SMCP_OIDC_ISSUER="https://your-identity-provider.com"
 export SMCP_OIDC_CLIENT_ID="your-client-id"
 export SMCP_OIDC_CLIENT_SECRET="your-client-secret"
@@ -240,8 +282,9 @@ export SMCP_OIDC_CLIENT_SECRET="your-client-secret"
 
 Once both components are running:
 1. Applications can connect to the client component (by default at http://localhost:8081)
-2. The client component authenticates with the OIDC provider and forwards requests to the server
-3. The server component validates tokens and forwards authenticated requests to the appropriate MCP backend based on the request path
+2. The client component forwards requests to the server
+3. If authentication is enabled, the client authenticates with the OIDC provider and the server validates tokens
+4. The server forwards requests to the appropriate MCP backend based on the request path
 
 ### Multiple Backend Support
 

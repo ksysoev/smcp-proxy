@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewClientConfig tests the old configuration method
-// These tests are kept for backward compatibility, but the system now
-// primarily uses direct command-line arguments and environment variables
+// TestNewClientConfig tests the client configuration
+// While the client primarily uses command-line arguments and environment variables,
+// these tests verify the configuration file behavior
 func TestNewClientConfig(t *testing.T) {
 	t.Run("Valid config file", func(t *testing.T) {
 		// Create a temporary config file
@@ -27,6 +27,9 @@ client:
 server:
   url: "https://proxy-server.example.com"
   timeout: "45s"
+
+auth:
+  mode: "oidc"
 
 oidc:
   issuer: "https://example.com"
@@ -66,6 +69,9 @@ metrics:
 		assert.Equal(t, "https://proxy-server.example.com", config.Server.URL)
 		assert.Equal(t, 45*time.Second, config.Server.Timeout)
 
+		// Verify auth mode
+		assert.Equal(t, OIDCAuthMode, config.Auth.Mode)
+
 		// Verify OIDC settings
 		assert.Equal(t, "https://example.com", config.OIDC.Issuer)
 		assert.Equal(t, "test-client", config.OIDC.ClientID)
@@ -98,6 +104,9 @@ server:
   url: "http://localhost:8080"
   timeout: "60s"
 
+auth:
+  mode: "oidc"
+
 oidc:
   issuer: "https://example.com"
   client_id: "test-client"
@@ -109,6 +118,7 @@ oidc:
 		// Set environment variables to override config
 		test.SetEnv(t, "SMCP_CLIENT_CLIENT_PORT", "9999")
 		test.SetEnv(t, "SMCP_CLIENT_SERVER_URL", "https://override.example.com")
+		test.SetEnv(t, "SMCP_CLIENT_AUTH_MODE", "none")
 
 		// Load the config
 		config, err := NewClientConfig(configPath)
@@ -118,6 +128,7 @@ oidc:
 		// Verify environment variables took precedence
 		assert.Equal(t, 9999, config.Client.Port)
 		assert.Equal(t, "https://override.example.com", config.Server.URL)
+		assert.Equal(t, NoAuthMode, config.Auth.Mode)
 	})
 
 	t.Run("Default values are set", func(t *testing.T) {
@@ -146,6 +157,7 @@ oidc:
 		assert.Equal(t, 30*time.Second, config.Client.WriteTimeout)
 		assert.Equal(t, 10*time.Second, config.Client.ShutdownTimeout)
 		assert.Equal(t, 60*time.Second, config.Server.Timeout)
+		assert.Equal(t, NoAuthMode, config.Auth.Mode) // Default auth mode is "none"
 		assert.Equal(t, []string{"openid"}, config.OIDC.Scopes)
 		assert.Equal(t, 5*time.Minute, config.OIDC.CacheTTL)
 		assert.Equal(t, 30*time.Second, config.OIDC.TokenTTLDelta)
@@ -154,76 +166,92 @@ oidc:
 		assert.Equal(t, "/metrics", config.Metrics.Path)
 	})
 
-	t.Run("Required fields validation", func(t *testing.T) {
-		// Test missing required fields one by one
-		testCases := []struct {
-			name          string
-			configContent string
-		}{
-			{
-				name: "Missing issuer",
-				configContent: `
+	t.Run("Required fields validation with auth mode", func(t *testing.T) {
+		// Test case 1: Missing server URL with both auth modes
+		configNoServerURL := `
+auth:
+  mode: "oidc"
+
+oidc:
+  issuer: "https://example.com"
+  client_id: "test-client"
+  client_secret: "test-secret"
+`
+		configPath := test.TempFile(t, configNoServerURL)
+		config, err := NewClientConfig(configPath)
+		require.Error(t, err)
+		require.Nil(t, config)
+		assert.Contains(t, err.Error(), "server URL is required")
+
+		// Test case 2: No auth or auth.mode=none doesn't require OIDC fields
+		configNoAuthNoOIDC := `
 server:
   url: "http://localhost:8080"
+
+auth:
+  mode: "none"
+`
+		configPath = test.TempFile(t, configNoAuthNoOIDC)
+		config, err = NewClientConfig(configPath)
+		require.NoError(t, err)
+		require.NotNil(t, config)
+
+		// Test case 3: auth.mode=oidc requires OIDC fields
+		configOIDCNoIssuer := `
+server:
+  url: "http://localhost:8080"
+
+auth:
+  mode: "oidc"
 
 oidc:
   # issuer missing
   client_id: "test-client"
   client_secret: "test-secret"
-  audience: "test-audience"
-`,
-			},
-			{
-				name: "Missing client ID",
-				configContent: `
+`
+		configPath = test.TempFile(t, configOIDCNoIssuer)
+		config, err = NewClientConfig(configPath)
+		require.Error(t, err)
+		require.Nil(t, config)
+		assert.Contains(t, err.Error(), "OIDC issuer is required when auth.mode is 'oidc'")
+
+		// Test case 4: auth.mode=oidc requires client ID
+		configOIDCNoClientID := `
 server:
   url: "http://localhost:8080"
+
+auth:
+  mode: "oidc"
 
 oidc:
   issuer: "https://example.com"
   # client_id missing
   client_secret: "test-secret"
-  audience: "test-audience"
-`,
-			},
-			{
-				name: "Missing client secret",
-				configContent: `
+`
+		configPath = test.TempFile(t, configOIDCNoClientID)
+		config, err = NewClientConfig(configPath)
+		require.Error(t, err)
+		require.Nil(t, config)
+		assert.Contains(t, err.Error(), "OIDC client ID is required when auth.mode is 'oidc'")
+
+		// Test case 5: auth.mode=oidc requires client secret
+		configOIDCNoClientSecret := `
 server:
   url: "http://localhost:8080"
+
+auth:
+  mode: "oidc"
 
 oidc:
   issuer: "https://example.com"
   client_id: "test-client"
   # client_secret missing
-  audience: "test-audience"
-`,
-			},
-			{
-				name: "Missing server URL",
-				configContent: `
-server:
-  # url missing
-  
-oidc:
-  issuer: "https://example.com"
-  client_id: "test-client"
-  client_secret: "test-secret"
-  audience: "test-audience"
-`,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				configPath := test.TempFile(t, tc.configContent)
-
-				// Attempt to load the config
-				config, err := NewClientConfig(configPath)
-				require.Error(t, err, "Expected validation error for "+tc.name)
-				require.Nil(t, config)
-			})
-		}
+`
+		configPath = test.TempFile(t, configOIDCNoClientSecret)
+		config, err = NewClientConfig(configPath)
+		require.Error(t, err)
+		require.Nil(t, config)
+		assert.Contains(t, err.Error(), "OIDC client secret is required when auth.mode is 'oidc'")
 	})
 
 	t.Run("Invalid config file", func(t *testing.T) {
@@ -250,8 +278,4 @@ oidc:
 // Add a note to indicate this package is retained for backward compatibility
 func init() {
 	// Empty init function is kept for future backward compatibility management
-	// If you need to enable compat warnings, uncomment below:
-	// if os.Getenv("SMCP_CLIENT_COMPAT_WARNING") == "" {
-	//     fmt.Println("Warning: The client configuration package is now deprecated. The client now primarily uses command-line arguments and environment variables.")
-	// }
 }

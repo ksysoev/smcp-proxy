@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-// TokenClient is responsible for acquiring OIDC tokens
+// TokenClient is responsible for acquiring authentication tokens
 type TokenClient interface {
 	// GetToken returns a valid token, refreshing if necessary
 	GetToken(ctx context.Context) (string, error)

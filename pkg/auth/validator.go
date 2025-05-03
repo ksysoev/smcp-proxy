@@ -22,7 +22,7 @@ var (
 	ErrClaimsMismatch = errors.New("claims mismatch")
 )
 
-// TokenValidator is responsible for validating OIDC tokens
+// TokenValidator is responsible for validating tokens
 type TokenValidator interface {
 	ValidateToken(ctx context.Context, token string) (jwt.MapClaims, error)
 }
@@ -213,7 +213,7 @@ func claimMatches(value interface{}, expectedValue string) bool {
 	}
 }
 
-// AuthMiddleware is a middleware that validates OIDC tokens
+// AuthMiddleware is a middleware that validates tokens
 func AuthMiddleware(validator TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

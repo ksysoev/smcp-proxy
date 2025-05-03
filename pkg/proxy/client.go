@@ -52,7 +52,7 @@ func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // ClientOptions holds options for creating a new client
 type ClientOptions struct {
-	OIDCAudience      string
+	AuthMode          config.AuthMode
 	MetricsPath       string
 	TLSKeyFile        string
 	TLSCertFile       string
@@ -61,14 +61,15 @@ type ClientOptions struct {
 	OIDCIssuer        string
 	OIDCClientID      string
 	OIDCClientSecret  string
+	OIDCAudience      string
 	OIDCScopes        []string
 	ShutdownTimeout   time.Duration
-	ServerTimeout     time.Duration
 	OIDCCacheTTL      time.Duration
 	OIDCTokenTTLDelta time.Duration
 	WriteTimeout      time.Duration
 	ReadTimeout       time.Duration
 	Port              int
+	ServerTimeout     time.Duration
 	TLSEnabled        bool
 	MetricsEnabled    bool
 }
@@ -82,17 +83,24 @@ func NewClient(
 		logger = slog.Default()
 	}
 
-	// Create the token client
-	tokenClient := auth.NewOIDCTokenClient(
-		opts.OIDCIssuer,
-		opts.OIDCClientID,
-		opts.OIDCClientSecret,
-		opts.OIDCAudience,
-		opts.OIDCScopes,
-		opts.OIDCCacheTTL,
-		opts.OIDCTokenTTLDelta,
-		logger,
-	)
+	// Create the appropriate token client based on auth mode
+	var tokenClient auth.TokenClient
+	if opts.AuthMode == config.OIDCAuthMode {
+		// Create OIDC token client
+		tokenClient = auth.NewOIDCTokenClient(
+			opts.OIDCIssuer,
+			opts.OIDCClientID,
+			opts.OIDCClientSecret,
+			opts.OIDCAudience,
+			opts.OIDCScopes,
+			opts.OIDCCacheTTL,
+			opts.OIDCTokenTTLDelta,
+			logger,
+		)
+	} else {
+		// Create no-op token client for no-auth mode
+		tokenClient = auth.NewNoAuthTokenClient()
+	}
 
 	// Create server mux
 	mux := http.NewServeMux()
@@ -181,17 +189,30 @@ func (c *Client) initRoutes() {
 	// Create the reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	// Create transport with token authentication
-	tokenTransport := &auth.TokenTransport{
-		Base:        http.DefaultTransport,
-		Client:      c.tokenClient,
-		CacheErrors: true,
-		Logger:      c.logger,
+	var transport http.RoundTripper
+
+	// Create appropriate transport based on auth mode
+	if c.cfg.Auth.Mode == config.OIDCAuthMode {
+		// Create transport with token authentication for OIDC mode
+		tokenTransport := &auth.TokenTransport{
+			Base:        http.DefaultTransport,
+			Client:      c.tokenClient,
+			CacheErrors: true,
+			Logger:      c.logger,
+		}
+		transport = tokenTransport
+	} else {
+		// Create no-auth transport for none mode
+		noAuthTransport := &auth.NoAuthTransport{
+			Base:   http.DefaultTransport,
+			Logger: c.logger,
+		}
+		transport = noAuthTransport
 	}
 
-	// Create instrumented transport wrapping the token transport
+	// Create instrumented transport wrapping the appropriate transport
 	proxy.Transport = &clientTransport{
-		base:   tokenTransport,
+		base:   transport,
 		logger: c.logger.With("target", c.cfg.Server.URL),
 	}
 
