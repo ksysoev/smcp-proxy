@@ -15,14 +15,15 @@ var (
 	serverConfigFile string
 	serverLogLevel   string
 	serverLogFormat  string
+	serverAuthMode   string
 )
 
 // serverCmd represents the server command
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Run the MCP proxy server with OIDC authentication",
-	Long: `Starts the proxy server that validates OIDC tokens and forwards 
-authenticated requests to the configured MCP servers.`,
+	Short: "Run the MCP proxy server that handles requests to MCP backends",
+	Long: `Starts the proxy server that forwards requests to the configured MCP servers.
+Can be configured to use OIDC authentication or run without authentication.`,
 	Run: runServer,
 }
 
@@ -33,6 +34,7 @@ func init() {
 	serverCmd.Flags().StringVarP(&serverConfigFile, "config", "c", "configs/proxy-server.yml", "Path to the configuration file")
 	serverCmd.Flags().StringVarP(&serverLogLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	serverCmd.Flags().StringVarP(&serverLogFormat, "log-format", "f", "text", "Log format (text, json)")
+	serverCmd.Flags().StringVar(&serverAuthMode, "auth-mode", "none", "Authentication mode (none, oidc)")
 }
 
 func runServer(cmd *cobra.Command, args []string) {
@@ -45,6 +47,17 @@ func runServer(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logger.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
+	}
+	
+	// Override auth mode from command line if specified
+	if cmd.Flags().Changed("auth-mode") {
+		// Convert auth mode to config type
+		if serverAuthMode == "oidc" {
+			cfg.Auth.Mode = config.OIDCAuthMode
+		} else {
+			cfg.Auth.Mode = config.NoAuthMode
+		}
+		logger.Info("Overriding auth mode from command line", "mode", serverAuthMode)
 	}
 
 	// Create application context

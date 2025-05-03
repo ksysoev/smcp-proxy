@@ -23,6 +23,9 @@ type ClientConfig struct {
 		URL     string        `mapstructure:"url"`
 		Timeout time.Duration `mapstructure:"timeout"`
 	} `mapstructure:"server"`
+	Auth struct {
+		Mode AuthMode `mapstructure:"mode"`
+	} `mapstructure:"auth"`
 	OIDC struct {
 		Issuer        string        `mapstructure:"issuer"`
 		ClientID      string        `mapstructure:"client_id"`
@@ -82,6 +85,9 @@ func setClientDefaults(v *viper.Viper) {
 	v.SetDefault("client.write_timeout", "30s")
 	v.SetDefault("client.shutdown_timeout", "10s")
 
+	// Auth defaults - no authentication by default
+	v.SetDefault("auth.mode", string(NoAuthMode))
+
 	// Server defaults
 	v.SetDefault("server.timeout", "60s")
 
@@ -100,20 +106,23 @@ func setClientDefaults(v *viper.Viper) {
 
 // validateClientConfig validates the client configuration
 func validateClientConfig(config *ClientConfig) error {
-	// Validate required OIDC configuration
-	if config.OIDC.Issuer == "" {
-		return fmt.Errorf("OIDC issuer is required")
-	}
-	if config.OIDC.ClientID == "" {
-		return fmt.Errorf("OIDC client ID is required")
-	}
-	if config.OIDC.ClientSecret == "" {
-		return fmt.Errorf("OIDC client secret is required")
-	}
-
 	// Validate server URL
 	if config.Server.URL == "" {
 		return fmt.Errorf("server URL is required")
+	}
+
+	// Only validate OIDC configuration if OIDC auth mode is enabled
+	if config.Auth.Mode == OIDCAuthMode {
+		// Validate required OIDC configuration
+		if config.OIDC.Issuer == "" {
+			return fmt.Errorf("OIDC issuer is required when auth.mode is 'oidc'")
+		}
+		if config.OIDC.ClientID == "" {
+			return fmt.Errorf("OIDC client ID is required when auth.mode is 'oidc'")
+		}
+		if config.OIDC.ClientSecret == "" {
+			return fmt.Errorf("OIDC client secret is required when auth.mode is 'oidc'")
+		}
 	}
 
 	return nil

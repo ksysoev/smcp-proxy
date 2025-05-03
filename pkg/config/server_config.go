@@ -41,8 +41,21 @@ type MCPBackend struct {
 	StripPath bool          `mapstructure:"strip_path"`
 }
 
+// AuthMode defines the authentication mode
+type AuthMode string
+
+const (
+	// OIDCAuthMode uses OIDC authentication
+	OIDCAuthMode AuthMode = "oidc"
+	// NoAuthMode disables authentication
+	NoAuthMode AuthMode = "none"
+)
+
 // ServerConfig holds the configuration for the proxy server
 type ServerConfig struct {
+	Auth struct {
+		Mode AuthMode `mapstructure:"mode"`
+	} `mapstructure:"auth"`
 	OIDC struct {
 		RequiredClaims map[string]string `mapstructure:"required_claims"`
 		OptionalClaims map[string]string `mapstructure:"optional_claims"`
@@ -107,6 +120,9 @@ func setServerDefaults(v *viper.Viper) {
 	v.SetDefault("server.read_timeout", "30s")
 	v.SetDefault("server.write_timeout", "30s")
 	v.SetDefault("server.shutdown_timeout", "10s")
+
+	// Auth defaults - no authentication by default
+	v.SetDefault("auth.mode", string(NoAuthMode))
 
 	// MCP defaults
 	v.SetDefault("mcp.timeout", "60s")
