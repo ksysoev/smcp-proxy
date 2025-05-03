@@ -61,7 +61,12 @@ func TestServerCommandExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		err := os.Remove(tempFile.Name())
+		if err != nil {
+			t.Logf("Failed to remove temp file: %v", err)
+		}
+	}()
 
 	// Write a minimal valid config
 	minimalConfig := `

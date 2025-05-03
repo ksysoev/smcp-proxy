@@ -13,7 +13,7 @@ import (
 
 func TestAuthMiddleware(t *testing.T) {
 	// Create a mock validator
-	mockValidator := &mockTokenValidator{}
+	mockValidator := &mockAuthTokenValidator{}
 
 	// Create the middleware
 	middleware := AuthMiddleware(mockValidator)
@@ -186,11 +186,11 @@ func TestClaimMatches(t *testing.T) {
 }
 
 // Mock token validator for testing
-type mockTokenValidator struct {
+type mockAuthTokenValidator struct {
 	claims jwt.MapClaims
 	err    error
 }
 
-func (m *mockTokenValidator) ValidateToken(ctx context.Context, token string) (jwt.MapClaims, error) {
+func (m *mockAuthTokenValidator) ValidateToken(ctx context.Context, token string) (jwt.MapClaims, error) {
 	return m.claims, m.err
 }

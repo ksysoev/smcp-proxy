@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,13 +14,22 @@ func TestRootCmd(t *testing.T) {
 	assert.Contains(t, rootCmd.Long, "reverse proxy server for MCP")
 }
 
-// This is a helper to test cobra commands
-func executeCommand(root *cobra.Command, args ...string) (string, error) {
+// This test helps verify that the root command can execute with help flag
+func TestRootCommandExecution(t *testing.T) {
+	// Create a buffer to capture output
 	buf := new(bytes.Buffer)
-	root.SetOut(buf)
-	root.SetErr(buf)
-	root.SetArgs(args)
-
-	err := root.Execute()
-	return buf.String(), err
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	
+	// Set help flag to trigger help output without executing any actual commands
+	rootCmd.SetArgs([]string{"--help"})
+	
+	// Execute the command
+	err := rootCmd.Execute()
+	assert.NoError(t, err)
+	
+	// Verify output contains expected help text
+	output := buf.String()
+	assert.Contains(t, output, "Usage:")
+	assert.Contains(t, output, "Available Commands:")
 }

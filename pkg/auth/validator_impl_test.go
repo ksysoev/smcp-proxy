@@ -2,58 +2,59 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"testing"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Mock implementation of OIDC provider
-type mockProvider struct {
-	privateKey *rsa.PrivateKey
-	issuer     string
+// mockTokenValidator is a test implementation of TokenValidator
+type mockTokenValidator struct {
+	requiredClaims map[string]string
+	optionalClaims map[string]string
 }
 
-// createMockProvider creates a new mock provider with randomly generated keys
-func createMockProvider(issuer string) (*mockProvider, error) {
-	// Generate a private key for signing tokens
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+// ValidateToken implements the TokenValidator interface for testing
+func (m *mockTokenValidator) ValidateToken(ctx context.Context, tokenStr string) (jwt.MapClaims, error) {
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, jwt.MapClaims{})
 	if err != nil {
+		return nil, ErrInvalidToken
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+
+	// Validate required claims
+	if err := m.verifyClaims(claims, m.requiredClaims, true); err != nil {
 		return nil, err
 	}
 
-	return &mockProvider{
-		privateKey: privateKey,
-		issuer:     issuer,
-	}, nil
-}
-
-// createToken creates a signed JWT token for testing
-func (p *mockProvider) createToken(audience string, subject string, claims map[string]interface{}) (string, error) {
-	// Create token with claims
-	now := time.Now()
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss": p.issuer,
-		"sub": subject,
-		"aud": audience,
-		"exp": now.Add(time.Hour).Unix(),
-		"iat": now.Unix(),
-		"nbf": now.Unix(),
-	})
-
-	// Add any additional claims
-	if claims != nil {
-		for k, v := range claims {
-			token.Claims.(jwt.MapClaims)[k] = v
-		}
+	// Validate optional claims
+	if err := m.verifyClaims(claims, m.optionalClaims, false); err != nil {
+		return nil, err
 	}
 
-	// Sign the token
-	return token.SignedString(p.privateKey)
+	return claims, nil
+}
+
+// verifyClaims verifies that the claims match the expected values
+func (m *mockTokenValidator) verifyClaims(claims jwt.MapClaims, expectedClaims map[string]string, required bool) error {
+	for claim, expectedValue := range expectedClaims {
+		value, exists := claims[claim]
+		if !exists {
+			if required {
+				return ErrClaimsMismatch
+			}
+			continue
+		}
+
+		if !claimMatches(value, expectedValue) {
+			return ErrClaimsMismatch
+		}
+	}
+	return nil
 }
 
 // TestOIDCTokenValidator_ValidateToken tests the token validation functionality
@@ -88,50 +89,14 @@ func TestOIDCTokenValidator_ValidateToken(t *testing.T) {
 		tokenStr, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
 		require.NoError(t, err)
 
-		// Create custom validator for testing with the None algorithm
-		validator.verifyClaims = func(claims jwt.MapClaims, expectedClaims map[string]string, required bool) error {
-			for claim, expectedValue := range expectedClaims {
-				value, exists := claims[claim]
-				if !exists {
-					if required {
-						return ErrClaimsMismatch
-					}
-					continue
-				}
-
-				if !claimMatches(value, expectedValue) {
-					return ErrClaimsMismatch
-				}
-			}
-			return nil
-		}
-
-		// Mock the token validation logic for testing
-		validator.ValidateToken = func(ctx context.Context, tokenStr string) (jwt.MapClaims, error) {
-			token, _, err := new(jwt.Parser).ParseUnverified(tokenStr, jwt.MapClaims{})
-			if err != nil {
-				return nil, ErrInvalidToken
-			}
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				return nil, ErrInvalidToken
-			}
-
-			// Validate required claims
-			if err := validator.verifyClaims(claims, validator.requiredClaims, true); err != nil {
-				return nil, err
-			}
-
-			// Validate optional claims
-			if err := validator.verifyClaims(claims, validator.optionalClaims, false); err != nil {
-				return nil, err
-			}
-
-			return claims, nil
+		// Create mock validator for testing
+		mockValidator := &mockTokenValidator{
+			requiredClaims: validator.requiredClaims,
+			optionalClaims: validator.optionalClaims,
 		}
 
 		// Test with all claims matching
-		claims, err := validator.ValidateToken(ctx, tokenStr)
+		claims, err := mockValidator.ValidateToken(ctx, tokenStr)
 		assert.NoError(t, err)
 		assert.Equal(t, "test-subject", claims["sub"])
 		assert.Equal(t, "admin", claims["role"])
