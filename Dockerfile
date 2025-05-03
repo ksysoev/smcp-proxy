@@ -1,8 +1,12 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Set necessary environment variables for the build
 ENV CGO_ENABLED=0 \
-    GOOS=linux
+    GOOS=linux \
+    GO111MODULE=on
+
+# Install git and ca-certificates for downloading modules
+RUN apk add --no-cache git ca-certificates
 
 # Create appuser for the final stage
 RUN adduser -D -g '' appuser
@@ -13,8 +17,8 @@ WORKDIR /app
 # Copy go mod and sum files
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies with verbose output
+RUN go mod download -x
 
 # Copy the entire codebase
 COPY . .
@@ -28,8 +32,8 @@ FROM scratch
 # Import the user from builder
 COPY --from=builder /etc/passwd /etc/passwd
 
-# Copy CA certificates for HTTPS connections
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Create directories for certificates
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 
 # Copy the binary from builder
 COPY --from=builder /app/smcp-proxy /app/smcp-proxy
