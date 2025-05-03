@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewClientConfig tests the old configuration method
-// These tests are kept for backward compatibility, but the system now
-// primarily uses direct command-line arguments and environment variables
+// TestNewClientConfig tests the client configuration
+// While the client primarily uses command-line arguments and environment variables,
+// these tests verify the configuration file behavior
 func TestNewClientConfig(t *testing.T) {
 	t.Run("Valid config file", func(t *testing.T) {
 		// Create a temporary config file

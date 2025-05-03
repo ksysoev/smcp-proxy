@@ -11,7 +11,7 @@ func TestServerCommand(t *testing.T) {
 	// Test that the server command is properly configured
 	assert.Equal(t, "server", serverCmd.Use)
 	assert.Contains(t, serverCmd.Short, "MCP proxy server")
-	assert.Contains(t, serverCmd.Long, "proxy server that validates OIDC tokens")
+	assert.Contains(t, serverCmd.Long, "forwards requests to the configured MCP servers")
 	assert.NotNil(t, serverCmd.Run)
 }
 
@@ -33,6 +33,11 @@ func TestServerFlagSetup(t *testing.T) {
 	logFormatFlag := cmd.Flag("log-format")
 	assert.NotNil(t, logFormatFlag)
 	assert.Equal(t, "text", logFormatFlag.Value.String())
+	
+	// Auth mode flag
+	authModeFlag := cmd.Flag("auth-mode")
+	assert.NotNil(t, authModeFlag)
+	assert.Equal(t, "none", authModeFlag.Value.String())
 }
 
 func TestServerLoggerSetup(t *testing.T) {
