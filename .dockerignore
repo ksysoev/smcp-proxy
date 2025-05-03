@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+.github
+
+# Docker
+.dockerignore
+Dockerfile
+
+# Build artifacts
+bin/
+coverage.*
+
+# Editor files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Go specific
+vendor/

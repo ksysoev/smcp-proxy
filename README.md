@@ -1,6 +1,7 @@
 # SMCP Proxy
 
 [![Go CI](https://github.com/ksysoev/smcp-proxy/actions/workflows/go-ci.yml/badge.svg)](https://github.com/ksysoev/smcp-proxy/actions/workflows/go-ci.yml)
+[![Docker Build](https://github.com/ksysoev/smcp-proxy/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ksysoev/smcp-proxy/actions/workflows/docker-publish.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ksysoev/smcp-proxy)](https://goreportcard.com/report/github.com/ksysoev/smcp-proxy)
 [![codecov](https://codecov.io/gh/ksysoev/smcp-proxy/branch/main/graph/badge.svg)](https://codecov.io/gh/ksysoev/smcp-proxy)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ksysoev/smcp-proxy.svg)](https://pkg.go.dev/github.com/ksysoev/smcp-proxy)
@@ -85,6 +86,32 @@ The main goals of this project are:
 # Build the single executable that includes both server and client functionality
 go build -o smcp-proxy ./cmd/smcp
 ```
+
+### Docker Image
+
+SMCP Proxy is also available as a Docker image that can be pulled from the GitHub Container Registry:
+
+```sh
+# Pull the latest image
+docker pull ghcr.io/ksysoev/smcp-proxy:main
+
+# Pull a specific version
+docker pull ghcr.io/ksysoev/smcp-proxy:v1.0.0
+```
+
+#### Running with Docker
+
+Run the server:
+```sh
+docker run -p 8080:8080 -v $(pwd)/configs:/app/configs ghcr.io/ksysoev/smcp-proxy:main server --config=/app/configs/proxy-server.yml
+```
+
+Run the client:
+```sh
+docker run -p 8081:8081 ghcr.io/ksysoev/smcp-proxy:main client --server-url=http://your-server:8080
+```
+
+The Docker image is built for both AMD64 and ARM64 architectures.
 
 ## Configuration
 
@@ -395,6 +422,7 @@ This project uses GitHub Actions for continuous integration:
 - **Linting**: Runs `golangci-lint` and `fieldalignment` to ensure code quality and performance
 - **Testing**: Runs unit tests with race detection and reports code coverage
 - **Building**: Ensures the project builds successfully on each push and pull request
+- **Docker**: Builds and validates Docker images for PR checks, and publishes multi-platform images (AMD64/ARM64) to GitHub Container Registry on merges to main and when tags are pushed
 
 To run tests and linting locally:
 
