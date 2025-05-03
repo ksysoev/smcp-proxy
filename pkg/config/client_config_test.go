@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -250,8 +249,9 @@ oidc:
 
 // Add a note to indicate this package is retained for backward compatibility
 func init() {
-	if os.Getenv("SMCP_CLIENT_COMPAT_WARNING") == "" {
-		// This is normally silenced, but useful during development
-		// fmt.Println("Warning: The client configuration package is now deprecated. The client now primarily uses command-line arguments and environment variables.")
-	}
+	// Empty init function is kept for future backward compatibility management
+	// If you need to enable compat warnings, uncomment below:
+	// if os.Getenv("SMCP_CLIENT_COMPAT_WARNING") == "" {
+	//     fmt.Println("Warning: The client configuration package is now deprecated. The client now primarily uses command-line arguments and environment variables.")
+	// }
 }
