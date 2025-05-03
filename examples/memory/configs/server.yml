@@ -1,0 +1,32 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "10s"
+
+# Authentication configuration (default: none)
+auth:
+  # Mode can be "none" or "oidc"
+  mode: "none"
+
+mcp:
+  # Global timeout for all backends
+  timeout: "60s"
+  
+  # Configure the Memory MCP backend
+  backends:
+    # Memory MCP server
+    - id: "memory"
+      name: "Memory"
+      model: "memory"
+      max_tokens: 100000
+      transport: "http"
+      url: "http://memory-mcp:3000"
+      path: "/v1/memory"
+      strip_path: true
+      timeout: "60s"
+
+metrics:
+  enabled: true
+  path: "/metrics"

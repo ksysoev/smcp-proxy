@@ -273,6 +273,11 @@ The server configuration still uses YAML files and can be overridden using envir
 ./smcp-proxy server --config=configs/proxy-server.yml --auth-mode=oidc --log-level=debug
 ```
 
+### Examples
+
+For complete working examples, see the [examples directory](./examples):
+- [Memory MCP Server Example](./examples/memory) - Shows how to set up SMCP Proxy with a Memory MCP server
+
 ### Starting the Client
 
 #### Without Authentication (Default)
