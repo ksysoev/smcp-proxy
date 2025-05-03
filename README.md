@@ -7,6 +7,14 @@
 
 A secure reverse proxy for Model Context Protocol (MCP) services with OIDC authentication.
 
+## What is Model Context Protocol (MCP)?
+
+The Model Context Protocol (MCP) is an open protocol that standardizes how applications provide context to Large Language Models (LLMs). It works like a "USB-C port for AI applications" - creating a consistent interface between applications and AI models.
+
+MCP follows a client-server architecture where host applications connect to multiple servers, enabling flexibility in switching between different AI providers while maintaining consistent data handling practices and security.
+
+For more information, visit [modelcontextprotocol.io](https://modelcontextprotocol.io).
+
 ## Overview
 
 SMCP Proxy provides a secure layer in front of Model Context Protocol (MCP) services, enabling enterprise-grade authentication and authorization using OIDC. MCP is a protocol designed for interacting with Large Language Models (LLMs) in a standardized way.
@@ -96,51 +104,27 @@ mcp:
   
   # Configure multiple MCP backends
   backends:
-    # HTTP backend for Claude 3 Opus
-    - id: "claude-3-opus"
-      name: "Claude 3 Opus"
-      model: "claude-3-opus-20240229"
-      max_tokens: 200000
-      transport: "http"
-      url: "http://mcp-opus.example.com"
-      path: "/v1/opus"
-      strip_path: true
-      timeout: "120s"  # Override global timeout
-    
-    # HTTP backend for Claude 3 Sonnet
-    - id: "claude-3-sonnet"
-      name: "Claude 3 Sonnet"
-      model: "claude-3-sonnet-20240229"
-      max_tokens: 180000
-      transport: "http"
-      url: "http://mcp-sonnet.example.com"
-      path: "/v1/sonnet"
-      strip_path: true
-    
-    # Local stdio backend for Claude 3 Haiku with subprocess
-    - id: "claude-3-haiku"
-      name: "Claude 3 Haiku"
-      model: "claude-3-haiku-20240307"
-      max_tokens: 150000
+    # Sequential thinking MCP server
+    - id: "sequentialthinking"
+      name: "Sequential Thinking"
       transport: "stdio"
-      path: "/v1/haiku"
+      path: "/v1/sequentialthinking"
       strip_path: true
       stdio:
-        command: "python"
-        args: ["-m", "anthropic.mcp_server", "--model", "claude-3-haiku-20240307"]
-        working_dir: "/opt/anthropic"
-        env:
-          ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
-          PYTHONPATH: "/opt/anthropic"
+        command: "docker"
+        args: ["run", "--rm", "-i", "mcp/sequentialthinking"]
         stdio_timeout: "60s"
     
-    # Default backend for all other paths
-    - id: "default-mcp"
-      name: "Default MCP"
-      transport: "http"
-      url: "http://mcp-default.example.com"
-      path: "/"
-      strip_path: false
+    # Memory MCP server
+    - id: "memory"
+      name: "Memory"
+      transport: "stdio"
+      path: "/v1/memory"
+      strip_path: true
+      stdio:
+        command: "docker"
+        args: ["run", "-i", "-v", "claude-memory:/app/dist", "--rm", "mcp/memory"]
+        stdio_timeout: "60s"
 
 oidc:
   issuers:
@@ -266,17 +250,17 @@ The proxy server supports multiple MCP backends with different transport types:
 ```
 ┌─────────────┐                  ┌───────────────────────────────┐
 │ Request to  │                  │        Proxy Server           │
-│ /v1/opus/.. ├─────────────────►│                               │──► HTTP Claude 3 Opus Backend
+│ /v1/seq../  ├─────────────────►│                               │──► Stdio Sequential Thinking Backend
 └─────────────┘                  │                               │
                                  │                               │
 ┌─────────────┐                  │                               │
 │ Request to  │                  │    OIDC Authentication +      │
-│ /v1/sonnet/ ├─────────────────►│     Path-Based Routing        │──► HTTP Claude 3 Sonnet Backend
+│ /v1/memory/ ├─────────────────►│     Path-Based Routing        │──► Stdio Memory Backend
 └─────────────┘                  │                               │
                                  │                               │
 ┌─────────────┐                  │                               │
 │ Request to  │                  │                               │
-│ /v1/haiku/  ├─────────────────►│                               │──► Stdio Claude 3 Haiku (Local Process)
+│ /other/path ├─────────────────►│                               │──► 404 Not Found
 └─────────────┘                  └───────────────────────────────┘
 ```
 
@@ -284,9 +268,9 @@ The proxy server supports multiple MCP backends with different transport types:
 
 With the `strip_path` option enabled, the proxy will remove the path prefix before forwarding the request to the backend:
 
-- Request to `/v1/opus/completions` → Forwarded to Opus backend as `/completions`
-- Request to `/v1/sonnet/messages` → Forwarded to Sonnet backend as `/messages`
-- Request to `/v1/haiku/chat` → Processed by local Haiku process as `/chat`
+- Request to `/v1/sequentialthinking/completions` → Forwarded to Sequential Thinking backend as `/completions`
+- Request to `/v1/memory/messages` → Forwarded to Memory backend as `/messages`
+- Request to `/some/other/path` → Returns 404 Not Found (no matching backend)
 
 #### Transport Types
 
@@ -295,20 +279,23 @@ The proxy supports two types of backends:
 1. **HTTP Backends** (`transport: "http"`):
    - Remote MCP servers accessible via HTTP
    - Configured with a URL and standard proxy settings
-   - Example: `url: "http://mcp-opus.example.com"`
+   - Example: `url: "http://mcp-server.example.com"`
 
 2. **Stdio Backends** (`transport: "stdio"`):
    - Local MCP servers running as subprocesses
    - Communication via standard input/output
    - Useful for running local model servers
-   - Example:
+   - Examples:
      ```yaml
+     # Sequential thinking MCP server
      stdio:
-       command: "python"
-       args: ["-m", "anthropic.mcp_server", "--model", "claude-3-haiku"]
-       working_dir: "/opt/anthropic"
-       env:
-         ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+       command: "docker"
+       args: ["run", "--rm", "-i", "mcp/sequentialthinking"]
+     
+     # Memory MCP server
+     stdio:
+       command: "docker"
+       args: ["run", "-i", "-v", "claude-memory:/app/dist", "--rm", "mcp/memory"]
      ```
 
 #### Models API
