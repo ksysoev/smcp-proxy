@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ksysoev/smcp-proxy/pkg/test"
 	"github.com/stretchr/testify/assert"
 )
@@ -49,7 +50,7 @@ func TestNoAuthMiddleware(t *testing.T) {
 		nextCalled = true
 
 		// Check if empty claims were added to the context
-		claims, ok := r.Context().Value(ClaimsContextKey).(map[string]interface{})
+		claims, ok := r.Context().Value(ClaimsContextKey).(jwt.MapClaims)
 		assert.True(t, ok)
 		assert.Empty(t, claims)
 	})

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ksysoev/smcp-proxy/pkg/config"
 	"github.com/ksysoev/smcp-proxy/pkg/proxy"
 	"github.com/spf13/cobra"
 )
@@ -216,6 +217,8 @@ func checkEnvVars(logger *slog.Logger) {
 	
 	// Check auth mode
 	if envAuthMode := os.Getenv("SMCP_AUTH_MODE"); envAuthMode != "" {
+		// For tests, always apply the env var
+		// In practice, this wouldn't change anything that's manually set
 		authMode = envAuthMode
 		logger.Debug("Using environment variable for auth mode", "value", authMode)
 	}

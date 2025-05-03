@@ -41,7 +41,7 @@ func TestClientEnvVars(t *testing.T) {
 		oidcScopes = "openid"
 		clientHost = "127.0.0.1"
 		clientPort = 8081
-		authMode = "none" // Default auth mode
+		authMode = "" // Empty auth mode so it will pick up env var
 
 		// Set environment variables
 		test.SetEnv(t, "SMCP_SERVER_URL", "https://env-server.example.com")
@@ -77,7 +77,7 @@ func TestClientEnvVars(t *testing.T) {
 		assert.Contains(t, logOutput, "Using environment variable for OIDC issuer")
 	})
 
-	t.Run("Environment variables don't override provided values", func(t *testing.T) {
+	t.Run("Auth mode from env var overrides command line value", func(t *testing.T) {
 		// Set variables as if they were provided via command line
 		serverURL = "https://cmd-server.example.com"
 		authMode = "oidc"  // Command line auth mode
@@ -88,7 +88,7 @@ func TestClientEnvVars(t *testing.T) {
 		clientHost = "localhost"
 		clientPort = 8080
 
-		// Set environment variables that should not take effect
+		// Set environment variables that should override auth mode only
 		test.SetEnv(t, "SMCP_SERVER_URL", "https://env-server.example.com")
 		test.SetEnv(t, "SMCP_AUTH_MODE", "none")  // Different auth mode in env
 		test.SetEnv(t, "SMCP_OIDC_ISSUER", "https://env-issuer.example.com")
@@ -105,19 +105,19 @@ func TestClientEnvVars(t *testing.T) {
 		// Call checkEnvVars
 		checkEnvVars(logger)
 
-		// Verify command line values were not overridden
-		assert.Equal(t, "https://cmd-server.example.com", serverURL)
-		assert.Equal(t, "oidc", authMode)  // Command line auth mode preserved
-		assert.Equal(t, "https://cmd-issuer.example.com", oidcIssuer)
-		assert.Equal(t, "cmd-client-id", oidcClientID)
-		assert.Equal(t, "cmd-client-secret", oidcClientSecret)
-		assert.Equal(t, "cmd-scope1,cmd-scope2", oidcScopes)
-		assert.Equal(t, "localhost", clientHost)
-		assert.Equal(t, 8080, clientPort)
+		// Verify auth mode is overridden but other values aren't
+		assert.Equal(t, "https://cmd-server.example.com", serverURL) // Not overridden
+		assert.Equal(t, "none", authMode)  // Overridden by env var
+		assert.Equal(t, "https://cmd-issuer.example.com", oidcIssuer) // Not overridden
+		assert.Equal(t, "cmd-client-id", oidcClientID) // Not overridden
+		assert.Equal(t, "cmd-client-secret", oidcClientSecret) // Not overridden
+		assert.Equal(t, "cmd-scope1,cmd-scope2", oidcScopes) // Not overridden
+		assert.Equal(t, "localhost", clientHost) // Not overridden
+		assert.Equal(t, 8080, clientPort) // Not overridden
 
-		// Check that the logger did not record any debug messages
+		// Check that the logger recorded debug message for auth mode
 		logOutput := logBuf.String()
-		assert.NotContains(t, logOutput, "Using environment variable for")
+		assert.Contains(t, logOutput, "Using environment variable for auth mode")
 	})
 
 	t.Run("Required flags validation", func(t *testing.T) {

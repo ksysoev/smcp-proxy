@@ -1,10 +1,9 @@
 package config
 
 import (
+	"os"
 	"testing"
-	"time"
 
-	"github.com/ksysoev/smcp-proxy/pkg/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +21,20 @@ oidc:
   client_id: "test-client"
   client_secret: "test-secret"
 `
-		configPath := test.TempFile(t, configContent)
+		tempFile, err := os.CreateTemp("", "client-config-*.yml")
+		require.NoError(t, err)
+		defer func() {
+			err := os.Remove(tempFile.Name())
+			if err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
+		
+		_, err = tempFile.Write([]byte(configContent))
+		require.NoError(t, err)
+		require.NoError(t, tempFile.Close())
+		
+		configPath := tempFile.Name()
 
 		// Load the config
 		config, err := NewClientConfig(configPath)
@@ -43,7 +55,20 @@ server:
   url: "http://localhost:8080"
   timeout: "60s"
 `
-		configPath := test.TempFile(t, configContent)
+		tempFile, err := os.CreateTemp("", "client-config-*.yml")
+		require.NoError(t, err)
+		defer func() {
+			err := os.Remove(tempFile.Name())
+			if err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
+		
+		_, err = tempFile.Write([]byte(configContent))
+		require.NoError(t, err)
+		require.NoError(t, tempFile.Close())
+		
+		configPath := tempFile.Name()
 		config, err := NewClientConfig(configPath)
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
@@ -58,7 +83,20 @@ server:
   url: "http://localhost:8080"
   timeout: "60s"
 `
-		configPath = test.TempFile(t, configContent)
+		tempFile, err = os.CreateTemp("", "client-config-*.yml")
+		require.NoError(t, err)
+		defer func() {
+			err := os.Remove(tempFile.Name())
+			if err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
+		
+		_, err = tempFile.Write([]byte(configContent))
+		require.NoError(t, err)
+		require.NoError(t, tempFile.Close())
+		
+		configPath = tempFile.Name()
 		config, err = NewClientConfig(configPath)
 		assert.Error(t, err)
 		assert.Nil(t, config)
@@ -78,7 +116,20 @@ oidc:
   client_id: "test-client"
   client_secret: "test-secret"
 `
-		configPath = test.TempFile(t, configContent)
+		tempFile, err = os.CreateTemp("", "client-config-*.yml")
+		require.NoError(t, err)
+		defer func() {
+			err := os.Remove(tempFile.Name())
+			if err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
+		
+		_, err = tempFile.Write([]byte(configContent))
+		require.NoError(t, err)
+		require.NoError(t, tempFile.Close())
+		
+		configPath = tempFile.Name()
 		config, err = NewClientConfig(configPath)
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
@@ -97,10 +148,40 @@ oidc:
   client_id: "test-client"
   client_secret: "test-secret"
 `
-		configPath := test.TempFile(t, configContent)
+		tempFile, err := os.CreateTemp("", "client-config-*.yml")
+		require.NoError(t, err)
+		defer func() {
+			err := os.Remove(tempFile.Name())
+			if err != nil {
+				t.Logf("Failed to remove temp file: %v", err)
+			}
+		}()
+		
+		_, err = tempFile.Write([]byte(configContent))
+		require.NoError(t, err)
+		require.NoError(t, tempFile.Close())
+		
+		configPath := tempFile.Name()
+
+		// Save and restore environment variables
+		oldEnv, exists := os.LookupEnv("SMCP_CLIENT_AUTH_MODE")
+		defer func() {
+			if exists {
+				err := os.Setenv("SMCP_CLIENT_AUTH_MODE", oldEnv)
+				if err != nil {
+					t.Logf("Failed to restore environment variable: %v", err)
+				}
+			} else {
+				err := os.Unsetenv("SMCP_CLIENT_AUTH_MODE")
+				if err != nil {
+					t.Logf("Failed to unset environment variable: %v", err)
+				}
+			}
+		}()
 
 		// Set environment variable to override auth mode
-		test.SetEnv(t, "SMCP_CLIENT_AUTH_MODE", "oidc")
+		err = os.Setenv("SMCP_CLIENT_AUTH_MODE", "oidc")
+		require.NoError(t, err)
 
 		// Load the config
 		config, err := NewClientConfig(configPath)
