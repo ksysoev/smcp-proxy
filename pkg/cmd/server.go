@@ -51,6 +51,12 @@ func runServer(cmd *cobra.Command, args []string) {
 	
 	// Override auth mode from command line if specified
 	if cmd.Flags().Changed("auth-mode") {
+		// Validate auth mode
+		if serverAuthMode != "oidc" && serverAuthMode != "none" {
+			logger.Error("Invalid value for auth-mode flag. Must be 'oidc' or 'none'.", "provided", serverAuthMode)
+			os.Exit(1)
+		}
+		
 		// Convert auth mode to config type
 		if serverAuthMode == "oidc" {
 			cfg.Auth.Mode = config.OIDCAuthMode

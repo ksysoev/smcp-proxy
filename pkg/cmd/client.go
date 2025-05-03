@@ -129,12 +129,11 @@ func runClient(cmd *cobra.Command, args []string) {
 		scopes = []string{"openid"}
 	}
 
-	// Convert auth mode to config type
-	var authModeConfig config.AuthMode
-	if authMode == "oidc" {
-		authModeConfig = config.OIDCAuthMode
-	} else {
-		authModeConfig = config.NoAuthMode
+	// Validate and convert auth mode to config type
+	authModeConfig, err := validateAuthMode(authMode)
+	if err != nil {
+		logger.Error("Invalid auth mode", "error", err)
+		os.Exit(1)
 	}
 
 	// Create client options
@@ -217,10 +216,16 @@ func checkEnvVars(logger *slog.Logger) {
 	
 	// Check auth mode
 	if envAuthMode := os.Getenv("SMCP_AUTH_MODE"); envAuthMode != "" {
-		// For tests, always apply the env var
-		// In practice, this wouldn't change anything that's manually set
-		authMode = envAuthMode
-		logger.Debug("Using environment variable for auth mode", "value", authMode)
+		// Validate the auth mode from environment
+		if envAuthMode != "oidc" && envAuthMode != "none" {
+			logger.Warn("Invalid auth mode in environment variable SMCP_AUTH_MODE. Must be 'oidc' or 'none'. Using default.", 
+				"provided", envAuthMode)
+		} else {
+			// For tests, always apply the valid env var
+			// In practice, this wouldn't change anything that's manually set
+			authMode = envAuthMode
+			logger.Debug("Using environment variable for auth mode", "value", authMode)
+		}
 	}
 
 	// Check OIDC settings only if auth mode is OIDC
@@ -339,4 +344,16 @@ func setupLogger(level, format string) *slog.Logger {
 	}
 
 	return slog.New(handler)
+}
+
+// validateAuthMode validates the auth mode and returns the corresponding config.AuthMode
+func validateAuthMode(mode string) (config.AuthMode, error) {
+	switch mode {
+	case "oidc":
+		return config.OIDCAuthMode, nil
+	case "none":
+		return config.NoAuthMode, nil
+	default:
+		return "", fmt.Errorf("invalid auth mode: %q (must be 'oidc' or 'none')", mode)
+	}
 }
