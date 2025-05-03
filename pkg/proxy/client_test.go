@@ -1,14 +1,45 @@
 package proxy
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+// MockTokenClient is a mock implementation of the auth.TokenClient interface
+type MockTokenClient struct {
+	mock.Mock
+}
+
+func (m *MockTokenClient) GetToken() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+// MockHTTPTransport is a mock implementation of http.RoundTripper
+type MockHTTPTransport struct {
+	mock.Mock
+}
+
+func (m *MockHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	args := m.Called(req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*http.Response), args.Error(1)
+}
+
+// No longer needed - we're now testing configuration instead of behavior
 
 func TestNewClient(t *testing.T) {
 	// Create a test logger
@@ -114,5 +145,157 @@ func TestNewClient(t *testing.T) {
 		// Note: This is a basic check, we can't easily verify the exact routes
 		// since the http.ServeMux doesn't expose its patterns
 		assert.NotNil(t, client.mux)
+	})
+}
+
+func TestClientConfiguration(t *testing.T) {
+	// Create a test logger
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	t.Run("Client without TLS configuration", func(t *testing.T) {
+		// Create minimal client options
+		opts := ClientOptions{
+			Host:             "127.0.0.1",
+			Port:             8081,
+			ServerURL:        "http://localhost:8080",
+			OIDCIssuer:       "https://example.com",
+			OIDCClientID:     "test-client",
+			OIDCClientSecret: "test-secret",
+			OIDCScopes:       []string{"openid"},
+			TLSEnabled:       false,
+		}
+
+		// Create client
+		client, err := NewClient(opts, testLogger)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		// Verify that TLS is disabled
+		assert.False(t, client.cfg.TLS.Enabled)
+	})
+
+	t.Run("Client with TLS configuration", func(t *testing.T) {
+		// Create minimal client options with TLS enabled
+		opts := ClientOptions{
+			Host:             "127.0.0.1",
+			Port:             8081,
+			ServerURL:        "http://localhost:8080",
+			OIDCIssuer:       "https://example.com",
+			OIDCClientID:     "test-client",
+			OIDCClientSecret: "test-secret",
+			OIDCScopes:       []string{"openid"},
+			TLSEnabled:       true,
+			TLSCertFile:      "cert.pem",
+			TLSKeyFile:       "key.pem",
+		}
+
+		// Create client
+		client, err := NewClient(opts, testLogger)
+		require.NoError(t, err)
+		require.NotNil(t, client)
+
+		// Verify TLS configuration
+		assert.True(t, client.cfg.TLS.Enabled)
+		assert.Equal(t, "cert.pem", client.cfg.TLS.CertFile)
+		assert.Equal(t, "key.pem", client.cfg.TLS.KeyFile)
+	})
+}
+
+func TestClientShutdownTimeout(t *testing.T) {
+	// Create a test logger
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// Create client options with specific shutdown timeout
+	opts := ClientOptions{
+		Host:             "127.0.0.1",
+		Port:             8081,
+		ServerURL:        "http://localhost:8080",
+		OIDCIssuer:       "https://example.com",
+		OIDCClientID:     "test-client",
+		OIDCClientSecret: "test-secret",
+		OIDCScopes:       []string{"openid"},
+		ShutdownTimeout:  15 * time.Second, // Custom timeout
+	}
+
+	// Create client
+	client, err := NewClient(opts, testLogger)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+
+	// Verify that the shutdown timeout was properly configured
+	assert.Equal(t, 15*time.Second, client.cfg.Client.ShutdownTimeout)
+}
+
+func TestClientTransport(t *testing.T) {
+	// Create a test logger
+	testLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	t.Run("RoundTrip with successful response", func(t *testing.T) {
+		// Create a mock transport
+		mockTransport := new(MockHTTPTransport)
+
+		// Setup the mock to return a successful response
+		mockResp := &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(bytes.NewBufferString("OK")),
+			Header:     make(http.Header),
+		}
+		mockTransport.On("RoundTrip", mock.Anything).Return(mockResp, nil)
+
+		// Create the client transport
+		transport := &clientTransport{
+			base:   mockTransport,
+			logger: testLogger,
+		}
+
+		// Create a test request
+		req := httptest.NewRequest("GET", "http://example.com/test", nil)
+
+		// Execute the round trip
+		resp, err := transport.RoundTrip(req)
+
+		// Verify the results
+		assert.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		// Verify that the mock was called
+		mockTransport.AssertCalled(t, "RoundTrip", mock.Anything)
+	})
+
+	t.Run("RoundTrip with error", func(t *testing.T) {
+		// Create a mock transport
+		mockTransport := new(MockHTTPTransport)
+
+		// Setup the mock to return an error
+		mockError := context.DeadlineExceeded
+		mockTransport.On("RoundTrip", mock.Anything).Return(nil, mockError)
+
+		// Create the client transport with a buffer logger to test logging
+		logBuf := &bytes.Buffer{}
+		bufLogger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+		transport := &clientTransport{
+			base:   mockTransport,
+			logger: bufLogger,
+		}
+
+		// Create a test request
+		req := httptest.NewRequest("GET", "http://example.com/test", nil)
+
+		// Execute the round trip
+		resp, err := transport.RoundTrip(req)
+
+		// Verify the results
+		assert.Error(t, err)
+		assert.Equal(t, mockError, err)
+		assert.Nil(t, resp)
+
+		// Verify that the mock was called
+		mockTransport.AssertCalled(t, "RoundTrip", mock.Anything)
+
+		// Verify that the error was logged
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "Request failed")
+		assert.Contains(t, logOutput, "context deadline exceeded")
 	})
 }
