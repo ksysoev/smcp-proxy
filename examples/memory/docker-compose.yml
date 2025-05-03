@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Memory MCP Server
+  memory-mcp:
+    image: ghcr.io/anthropic-labs/mcp/memory:latest
+    volumes:
+      - memory-data:/app/dist
+    networks:
+      - mcp-network
+    restart: unless-stopped
+
+  # SMCP Proxy Server
+  smcp-server:
+    image: ghcr.io/ksysoev/smcp-proxy:main
+    command: ["server", "--config=/app/configs/server.yml", "--log-level=debug"]
+    volumes:
+      - ./configs:/app/configs
+    ports:
+      - "8080:8080"
+    networks:
+      - mcp-network
+    depends_on:
+      - memory-mcp
+    restart: unless-stopped
+
+  # SMCP Proxy Client
+  smcp-client:
+    image: ghcr.io/ksysoev/smcp-proxy:main
+    command: ["client", "--server-url=http://smcp-server:8080", "--log-level=debug"]
+    ports:
+      - "8081:8081"
+    networks:
+      - mcp-network
+    depends_on:
+      - smcp-server
+    restart: unless-stopped
+
+networks:
+  mcp-network:
+    driver: bridge
+
+volumes:
+  memory-data:
