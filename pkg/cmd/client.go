@@ -2,21 +2,51 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
-	"github.com/ksysoev/smcp-proxy/pkg/config"
 	"github.com/ksysoev/smcp-proxy/pkg/proxy"
 	"github.com/spf13/cobra"
 )
 
 var (
-	clientConfigFile string
-	clientLogLevel   string
-	clientLogFormat  string
+	// Client settings
+	clientHost            string
+	clientPort            int
+	clientReadTimeout     time.Duration
+	clientWriteTimeout    time.Duration
+	clientShutdownTimeout time.Duration
+
+	// Server settings
+	serverURL     string
+	serverTimeout time.Duration
+
+	// OIDC settings
+	oidcIssuer        string
+	oidcClientID      string
+	oidcClientSecret  string
+	oidcAudience      string
+	oidcScopes        string
+	oidcCacheTTL      time.Duration
+	oidcTokenTTLDelta time.Duration
+
+	// TLS settings
+	tlsEnabled  bool
+	tlsCertFile string
+	tlsKeyFile  string
+
+	// Metrics settings
+	metricsEnabled bool
+	metricsPath    string
+
+	// Logger settings
+	clientLogLevel  string
+	clientLogFormat string
 )
 
 // clientCmd represents the client command
@@ -31,8 +61,49 @@ to acquire OIDC tokens and forwards requests to the proxy server.`,
 func init() {
 	rootCmd.AddCommand(clientCmd)
 
-	// Add flags
-	clientCmd.Flags().StringVarP(&clientConfigFile, "config", "c", "configs/proxy-client.yml", "Path to the configuration file")
+	// Client flags
+	clientCmd.Flags().StringVar(&clientHost, "host", "127.0.0.1", "Host to bind the client to")
+	clientCmd.Flags().IntVar(&clientPort, "port", 8081, "Port to bind the client to")
+	clientCmd.Flags().DurationVar(&clientReadTimeout, "read-timeout", 30*time.Second, "HTTP read timeout")
+	clientCmd.Flags().DurationVar(&clientWriteTimeout, "write-timeout", 30*time.Second, "HTTP write timeout")
+	clientCmd.Flags().DurationVar(&clientShutdownTimeout, "shutdown-timeout", 10*time.Second, "Graceful shutdown timeout")
+
+	// Server flags
+	clientCmd.Flags().StringVar(&serverURL, "server-url", "", "URL of the proxy server")
+	clientCmd.Flags().DurationVar(&serverTimeout, "server-timeout", 60*time.Second, "Timeout for requests to the server")
+	if err := clientCmd.MarkFlagRequired("server-url"); err != nil {
+		// This should never happen unless there's a programming error
+		panic(fmt.Sprintf("Failed to mark server-url flag as required: %v", err))
+	}
+
+	// OIDC flags
+	clientCmd.Flags().StringVar(&oidcIssuer, "oidc-issuer", "", "OIDC issuer URL")
+	clientCmd.Flags().StringVar(&oidcClientID, "oidc-client-id", "", "OIDC client ID")
+	clientCmd.Flags().StringVar(&oidcClientSecret, "oidc-client-secret", "", "OIDC client secret")
+	clientCmd.Flags().StringVar(&oidcAudience, "oidc-audience", "", "OIDC audience")
+	clientCmd.Flags().StringVar(&oidcScopes, "oidc-scopes", "openid", "OIDC scopes (comma-separated)")
+	clientCmd.Flags().DurationVar(&oidcCacheTTL, "oidc-cache-ttl", 5*time.Minute, "OIDC token cache TTL")
+	clientCmd.Flags().DurationVar(&oidcTokenTTLDelta, "oidc-token-ttl-delta", 30*time.Second, "OIDC token TTL delta")
+
+	// Mark required OIDC flags
+	requiredFlags := []string{"oidc-issuer", "oidc-client-id", "oidc-client-secret"}
+	for _, flag := range requiredFlags {
+		if err := clientCmd.MarkFlagRequired(flag); err != nil {
+			// This should never happen unless there's a programming error
+			panic(fmt.Sprintf("Failed to mark %s flag as required: %v", flag, err))
+		}
+	}
+
+	// TLS flags
+	clientCmd.Flags().BoolVar(&tlsEnabled, "tls", false, "Enable TLS")
+	clientCmd.Flags().StringVar(&tlsCertFile, "tls-cert", "", "Path to TLS certificate file")
+	clientCmd.Flags().StringVar(&tlsKeyFile, "tls-key", "", "Path to TLS key file")
+
+	// Metrics flags
+	clientCmd.Flags().BoolVar(&metricsEnabled, "metrics", true, "Enable metrics endpoint")
+	clientCmd.Flags().StringVar(&metricsPath, "metrics-path", "/metrics", "Metrics endpoint path")
+
+	// Logger flags
 	clientCmd.Flags().StringVarP(&clientLogLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	clientCmd.Flags().StringVarP(&clientLogFormat, "log-format", "f", "text", "Log format (text, json)")
 }
@@ -42,15 +113,57 @@ func runClient(cmd *cobra.Command, args []string) {
 	logger := setupLogger(clientLogLevel, clientLogFormat)
 	logger.Info("Starting MCP proxy client")
 
-	// Load configuration
-	cfg, err := config.NewClientConfig(clientConfigFile)
-	if err != nil {
-		logger.Error("Failed to load configuration", "error", err)
+	// Get environment variables as fallbacks for required flags
+	checkEnvVars(logger)
+
+	// Validate required flags
+	if err := validateRequiredFlags(); err != nil {
+		logger.Error("Required flag not set", "error", err)
 		os.Exit(1)
 	}
 
+	// Parse OIDC scopes
+	var scopes []string
+	if oidcScopes != "" {
+		scopes = strings.Split(oidcScopes, ",")
+	} else {
+		scopes = []string{"openid"}
+	}
+
+	// Create client options
+	opts := proxy.ClientOptions{
+		// Client settings
+		Host:            clientHost,
+		Port:            clientPort,
+		ReadTimeout:     clientReadTimeout,
+		WriteTimeout:    clientWriteTimeout,
+		ShutdownTimeout: clientShutdownTimeout,
+
+		// Server settings
+		ServerURL:     serverURL,
+		ServerTimeout: serverTimeout,
+
+		// OIDC settings
+		OIDCIssuer:        oidcIssuer,
+		OIDCClientID:      oidcClientID,
+		OIDCClientSecret:  oidcClientSecret,
+		OIDCAudience:      oidcAudience,
+		OIDCScopes:        scopes,
+		OIDCCacheTTL:      oidcCacheTTL,
+		OIDCTokenTTLDelta: oidcTokenTTLDelta,
+
+		// TLS settings
+		TLSEnabled:  tlsEnabled,
+		TLSCertFile: tlsCertFile,
+		TLSKeyFile:  tlsKeyFile,
+
+		// Metrics settings
+		MetricsEnabled: metricsEnabled,
+		MetricsPath:    metricsPath,
+	}
+
 	// Create client
-	client, err := proxy.NewClient(cfg, logger)
+	client, err := proxy.NewClient(opts, logger)
 	if err != nil {
 		logger.Error("Failed to create client", "error", err)
 		os.Exit(1)
@@ -70,7 +183,7 @@ func runClient(cmd *cobra.Command, args []string) {
 	<-sig
 
 	// Create shutdown context with timeout
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Client.ShutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), clientShutdownTimeout)
 	defer shutdownCancel()
 
 	// Shutdown client gracefully
@@ -80,6 +193,96 @@ func runClient(cmd *cobra.Command, args []string) {
 	}
 
 	logger.Info("Client shutdown complete")
+}
+
+// checkEnvVars checks environment variables as fallbacks for required flags
+func checkEnvVars(logger *slog.Logger) {
+	// Check server URL
+	if serverURL == "" {
+		if envURL := os.Getenv("SMCP_SERVER_URL"); envURL != "" {
+			serverURL = envURL
+			logger.Debug("Using environment variable for server URL", "value", serverURL)
+		}
+	}
+
+	// Check OIDC issuer
+	if oidcIssuer == "" {
+		if envIssuer := os.Getenv("SMCP_OIDC_ISSUER"); envIssuer != "" {
+			oidcIssuer = envIssuer
+			logger.Debug("Using environment variable for OIDC issuer", "value", oidcIssuer)
+		}
+	}
+
+	// Check OIDC client ID
+	if oidcClientID == "" {
+		if envClientID := os.Getenv("SMCP_OIDC_CLIENT_ID"); envClientID != "" {
+			oidcClientID = envClientID
+			logger.Debug("Using environment variable for OIDC client ID", "value", oidcClientID)
+		}
+	}
+
+	// Check OIDC client secret
+	if oidcClientSecret == "" {
+		if envClientSecret := os.Getenv("SMCP_OIDC_CLIENT_SECRET"); envClientSecret != "" {
+			oidcClientSecret = envClientSecret
+			logger.Debug("Using environment variable for OIDC client secret")
+		}
+	}
+
+	// Check OIDC audience
+	if oidcAudience == "" {
+		if envAudience := os.Getenv("SMCP_OIDC_AUDIENCE"); envAudience != "" {
+			oidcAudience = envAudience
+			logger.Debug("Using environment variable for OIDC audience", "value", oidcAudience)
+		}
+	}
+
+	// Check OIDC scopes
+	if oidcScopes == "openid" {
+		if envScopes := os.Getenv("SMCP_OIDC_SCOPES"); envScopes != "" {
+			oidcScopes = envScopes
+			logger.Debug("Using environment variable for OIDC scopes", "value", oidcScopes)
+		}
+	}
+
+	// Check other optional settings from environment
+	if envHost := os.Getenv("SMCP_CLIENT_HOST"); envHost != "" && clientHost == "127.0.0.1" {
+		clientHost = envHost
+		logger.Debug("Using environment variable for client host", "value", clientHost)
+	}
+
+	if envPort := os.Getenv("SMCP_CLIENT_PORT"); envPort != "" && clientPort == 8081 {
+		if port, err := parseEnvInt(envPort); err == nil {
+			clientPort = port
+			logger.Debug("Using environment variable for client port", "value", clientPort)
+		}
+	}
+}
+
+// validateRequiredFlags validates that all required flags are set
+func validateRequiredFlags() error {
+	if serverURL == "" {
+		return fmt.Errorf("server URL is required (use --server-url flag or SMCP_SERVER_URL environment variable)")
+	}
+	if oidcIssuer == "" {
+		return fmt.Errorf("OIDC issuer is required (use --oidc-issuer flag or SMCP_OIDC_ISSUER environment variable)")
+	}
+	if oidcClientID == "" {
+		return fmt.Errorf("OIDC client ID is required (use --oidc-client-id flag or SMCP_OIDC_CLIENT_ID environment variable)")
+	}
+	if oidcClientSecret == "" {
+		return fmt.Errorf("OIDC client secret is required (use --oidc-client-secret flag or SMCP_OIDC_CLIENT_SECRET environment variable)")
+	}
+	return nil
+}
+
+// parseEnvInt parses an environment variable as an integer
+func parseEnvInt(value string) (int, error) {
+	var i int
+	if _, err := fmt.Sscanf(value, "%d", &i); err != nil {
+		return 0, err
+	}
+	return i, nil
 }
 
 // setupLogger creates a new logger with the specified level and format

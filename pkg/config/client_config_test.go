@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestNewClientConfig tests the old configuration method
+// These tests are kept for backward compatibility, but the system now
+// primarily uses direct command-line arguments and environment variables
 func TestNewClientConfig(t *testing.T) {
 	t.Run("Valid config file", func(t *testing.T) {
 		// Create a temporary config file
@@ -242,4 +246,12 @@ oidc:
 		require.Error(t, err)
 		require.Nil(t, config)
 	})
+}
+
+// Add a note to indicate this package is retained for backward compatibility
+func init() {
+	if os.Getenv("SMCP_CLIENT_COMPAT_WARNING") == "" {
+		// This is normally silenced, but useful during development
+		// fmt.Println("Warning: The client configuration package is now deprecated. The client now primarily uses command-line arguments and environment variables.")
+	}
 }

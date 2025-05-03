@@ -170,42 +170,64 @@ metrics:
 
 ### Client Configuration
 
-Client configuration is specified in `configs/proxy-client.yml`:
+The proxy client has been simplified to use command-line arguments and environment variables instead of a configuration file.
 
-```yaml
-client:
-  host: "127.0.0.1"
-  port: 8081
-  read_timeout: "30s"
-  write_timeout: "30s"
-  shutdown_timeout: "10s"
+#### Command-Line Arguments
 
-server:
-  url: "http://localhost:8080"  # URL of the proxy server
-  timeout: "60s"
+```
+Client flags:
+  --host string                  Host to bind the client to (default "127.0.0.1")
+  --port int                     Port to bind the client to (default 8081)
+  --read-timeout duration        HTTP read timeout (default 30s)
+  --write-timeout duration       HTTP write timeout (default 30s)
+  --shutdown-timeout duration    Graceful shutdown timeout (default 10s)
 
-oidc:
-  issuer: "https://your-identity-provider.com"  # Replace with your actual OIDC issuer URL
-  client_id: "your-client-id"                   # Replace with your client ID
-  client_secret: "your-client-secret"           # Replace with your client secret
-  audience: "your-api-audience"                 # Replace with your API audience
-  scopes:
-    - "openid"
-    # Add additional scopes as needed
-  cache_ttl: "5m"         # Cache tokens for 5 minutes
-  token_ttl_delta: "30s"  # Refresh tokens 30 seconds before they expire
+Server flags:
+  --server-url string            URL of the proxy server (required)
+  --server-timeout duration      Timeout for requests to the server (default 60s)
 
-tls:
-  enabled: false
-  # cert_file: "/path/to/cert.pem"
-  # key_file: "/path/to/key.pem"
+OIDC flags:
+  --oidc-issuer string           OIDC issuer URL (required)
+  --oidc-client-id string        OIDC client ID (required)
+  --oidc-client-secret string    OIDC client secret (required)
+  --oidc-audience string         OIDC audience
+  --oidc-scopes string           OIDC scopes (comma-separated) (default "openid")
+  --oidc-cache-ttl duration      OIDC token cache TTL (default 5m0s)
+  --oidc-token-ttl-delta duration OIDC token TTL delta (default 30s)
 
-metrics:
-  enabled: true
-  path: "/metrics"
+TLS flags:
+  --tls                          Enable TLS (default false)
+  --tls-cert string              Path to TLS certificate file
+  --tls-key string               Path to TLS key file
+
+Metrics flags:
+  --metrics                      Enable metrics endpoint (default true)
+  --metrics-path string          Metrics endpoint path (default "/metrics")
+
+Logger flags:
+  -l, --log-level string         Log level (debug, info, warn, error) (default "info")
+  -f, --log-format string        Log format (text, json) (default "text")
 ```
 
-Both configurations can be overridden using environment variables with the prefix `SMCP_PROXY_` for the server and `SMCP_CLIENT_` for the client.
+#### Environment Variables
+
+All command-line options can also be set using environment variables with the prefix `SMCP_CLIENT_`. For example:
+
+```sh
+# Required configuration
+export SMCP_SERVER_URL="http://localhost:8080"
+export SMCP_OIDC_ISSUER="https://your-identity-provider.com"
+export SMCP_OIDC_CLIENT_ID="your-client-id"
+export SMCP_OIDC_CLIENT_SECRET="your-client-secret"
+
+# Optional configuration
+export SMCP_CLIENT_HOST="127.0.0.1"
+export SMCP_CLIENT_PORT=8081
+export SMCP_OIDC_AUDIENCE="your-api-audience"
+export SMCP_OIDC_SCOPES="openid,profile,email"
+```
+
+The server configuration still uses YAML files and can be overridden using environment variables with the prefix `SMCP_PROXY_`.
 
 ## Usage
 
@@ -225,8 +247,20 @@ go build -o smcp-proxy ./cmd/proxy-server
 # Build the client
 go build -o smcp-proxy ./cmd/proxy-client
 
-# Run the client
-./smcp-proxy client --config=configs/proxy-client.yml --log-level=debug
+# Run the client with command line arguments
+./smcp-proxy client \
+    --server-url="http://localhost:8080" \
+    --oidc-issuer="https://your-identity-provider.com" \
+    --oidc-client-id="your-client-id" \
+    --oidc-client-secret="your-client-secret" \
+    --log-level=debug
+
+# Alternatively, use environment variables
+export SMCP_SERVER_URL="http://localhost:8080"
+export SMCP_OIDC_ISSUER="https://your-identity-provider.com"
+export SMCP_OIDC_CLIENT_ID="your-client-id"
+export SMCP_OIDC_CLIENT_SECRET="your-client-secret"
+./smcp-proxy client --log-level=debug
 ```
 
 Once both components are running:

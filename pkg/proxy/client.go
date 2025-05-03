@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/ksysoev/smcp-proxy/pkg/auth"
 	"github.com/ksysoev/smcp-proxy/pkg/config"
@@ -21,9 +22,60 @@ type Client struct {
 	mux         *http.ServeMux
 }
 
+// clientTransport is a transport that logs request details
+type clientTransport struct {
+	base   http.RoundTripper
+	logger *slog.Logger
+}
+
+// RoundTrip implements the http.RoundTripper interface
+func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	t.logger.Debug("Sending request", "method", req.Method, "url", req.URL.String())
+
+	resp, err := t.base.RoundTrip(req)
+
+	if err != nil {
+		t.logger.Error("Request failed", "method", req.Method, "url", req.URL.String(), "error", err, "duration", time.Since(start))
+		return nil, err
+	}
+
+	t.logger.Debug("Received response",
+		"method", req.Method,
+		"url", req.URL.String(),
+		"status", resp.StatusCode,
+		"duration", time.Since(start),
+	)
+
+	return resp, nil
+}
+
+// ClientOptions holds options for creating a new client
+type ClientOptions struct {
+	OIDCAudience      string
+	MetricsPath       string
+	TLSKeyFile        string
+	TLSCertFile       string
+	Host              string
+	ServerURL         string
+	OIDCIssuer        string
+	OIDCClientID      string
+	OIDCClientSecret  string
+	OIDCScopes        []string
+	ShutdownTimeout   time.Duration
+	ServerTimeout     time.Duration
+	OIDCCacheTTL      time.Duration
+	OIDCTokenTTLDelta time.Duration
+	WriteTimeout      time.Duration
+	ReadTimeout       time.Duration
+	Port              int
+	TLSEnabled        bool
+	MetricsEnabled    bool
+}
+
 // NewClient creates a new proxy client
 func NewClient(
-	cfg *config.ClientConfig,
+	opts ClientOptions,
 	logger *slog.Logger,
 ) (*Client, error) {
 	if logger == nil {
@@ -32,13 +84,13 @@ func NewClient(
 
 	// Create the token client
 	tokenClient := auth.NewOIDCTokenClient(
-		cfg.OIDC.Issuer,
-		cfg.OIDC.ClientID,
-		cfg.OIDC.ClientSecret,
-		cfg.OIDC.Audience,
-		cfg.OIDC.Scopes,
-		cfg.OIDC.CacheTTL,
-		cfg.OIDC.TokenTTLDelta,
+		opts.OIDCIssuer,
+		opts.OIDCClientID,
+		opts.OIDCClientSecret,
+		opts.OIDCAudience,
+		opts.OIDCScopes,
+		opts.OIDCCacheTTL,
+		opts.OIDCTokenTTLDelta,
 		logger,
 	)
 
@@ -46,13 +98,24 @@ func NewClient(
 	mux := http.NewServeMux()
 
 	// Setup HTTP server
-	addr := fmt.Sprintf("%s:%d", cfg.Client.Host, cfg.Client.Port)
+	addr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
 	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      mux,
-		ReadTimeout:  cfg.Client.ReadTimeout,
-		WriteTimeout: cfg.Client.WriteTimeout,
+		ReadTimeout:  opts.ReadTimeout,
+		WriteTimeout: opts.WriteTimeout,
 	}
+
+	// Create a config struct for backward compatibility with other methods
+	cfg := &config.ClientConfig{}
+	cfg.Server.URL = opts.ServerURL
+	cfg.Server.Timeout = opts.ServerTimeout
+	cfg.TLS.Enabled = opts.TLSEnabled
+	cfg.TLS.CertFile = opts.TLSCertFile
+	cfg.TLS.KeyFile = opts.TLSKeyFile
+	cfg.Metrics.Enabled = opts.MetricsEnabled
+	cfg.Metrics.Path = opts.MetricsPath
+	cfg.Client.ShutdownTimeout = opts.ShutdownTimeout
 
 	client := &Client{
 		httpServer:  httpServer,
@@ -127,7 +190,7 @@ func (c *Client) initRoutes() {
 	}
 
 	// Create instrumented transport wrapping the token transport
-	proxy.Transport = &instrumentedTransport{
+	proxy.Transport = &clientTransport{
 		base:   tokenTransport,
 		logger: c.logger.With("target", c.cfg.Server.URL),
 	}
