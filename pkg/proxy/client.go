@@ -52,7 +52,7 @@ func (t *clientTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // ClientOptions holds options for creating a new client
 type ClientOptions struct {
-	OIDCAudience      string
+	AuthMode          config.AuthMode
 	MetricsPath       string
 	TLSKeyFile        string
 	TLSCertFile       string
@@ -61,17 +61,17 @@ type ClientOptions struct {
 	OIDCIssuer        string
 	OIDCClientID      string
 	OIDCClientSecret  string
+	OIDCAudience      string
 	OIDCScopes        []string
 	ShutdownTimeout   time.Duration
-	ServerTimeout     time.Duration
 	OIDCCacheTTL      time.Duration
 	OIDCTokenTTLDelta time.Duration
 	WriteTimeout      time.Duration
 	ReadTimeout       time.Duration
 	Port              int
+	ServerTimeout     time.Duration
 	TLSEnabled        bool
 	MetricsEnabled    bool
-	AuthMode          config.AuthMode
 }
 
 // NewClient creates a new proxy client
