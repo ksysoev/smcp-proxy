@@ -70,11 +70,8 @@ The main goals of this project are:
 ### Building from Source
 
 ```sh
-# Build the server component
-go build -o smcp-proxy-server ./cmd/proxy-server
-
-# Build the client component
-go build -o smcp-proxy-client ./cmd/proxy-client
+# Build the single executable that includes both server and client functionality
+go build -o smcp-proxy ./cmd/smcp
 ```
 
 ## Configuration
@@ -234,9 +231,6 @@ The server configuration still uses YAML files and can be overridden using envir
 ### Starting the Server
 
 ```sh
-# Build the server
-go build -o smcp-proxy ./cmd/proxy-server
-
 # Run the server
 ./smcp-proxy server --config=configs/proxy-server.yml --log-level=debug
 ```
@@ -244,9 +238,6 @@ go build -o smcp-proxy ./cmd/proxy-server
 ### Starting the Client
 
 ```sh
-# Build the client
-go build -o smcp-proxy ./cmd/proxy-client
-
 # Run the client with command line arguments
 ./smcp-proxy client \
     --server-url="http://localhost:8080" \
@@ -331,11 +322,11 @@ The proxy provides a `/api/models` endpoint that returns information about all c
 ```
 .
 ├── cmd/                    # Application entry points
-│   ├── proxy-server/       # Server binary entry point
-│   └── proxy-client/       # Client binary entry point
+│   └── smcp/               # Single executable directory 
+│       └── main.go         # Main entry point
 ├── configs/                # Configuration files
 │   ├── proxy-server.yml    # Server configuration
-│   └── proxy-client.yml    # Client configuration
+│   └── proxy-client.yml    # Client configuration example (not required)
 ├── internal/               # Private application code
 │   ├── middleware/         # HTTP middleware
 │   │   ├── logging.go      # Request logging middleware
